@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Collage</title>
+    <meta name="description" content="Make simple collages with ease.">
+    <script src="main.js"></script>
+    <script src="vendor/kiwi.min.js"></script>
+    <style>
+      body {
+        background-color: #FEFEFE;
+        background-image: linear-gradient(45deg, #CBCBCB 25%, transparent 25%, transparent 75%, #CBCBCB 75%, #CBCBCB), linear-gradient(45deg, #CBCBCB 25%, transparent 25%, transparent 75%, #CBCBCB 75%, #CBCBCB);
+        background-size:30px 30px;
+        background-position:0 0, 15px 15px;
+      }
+
+      .flex {
+        display: flex;
+        flex-direction: column;
+        max-height: 100vh;
+      }
+
+      #canvas {
+        width: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app-container"></div>
+    <div class="flex">
+      <div>
+        <a href="" id="download" download="canvas.jpg">Download canvas</a>
+      </div>
+      <canvas id="canvas"></canvas>
+    </div>
+    <script src="init.js"></script>
+  </body>
+</html>
