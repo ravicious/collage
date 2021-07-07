@@ -7,7 +7,7 @@
     "uglify-js": "^3.13.10"
   },
   "scripts": {
-    "dev-server": "elm-live src/Main.elm -- --debug --output=main.js",
+    "dev-server": "elm-live src/Main.elm --host 0.0.0.0 -- --debug --output=main.js",
     "compile-min": "elm make src/Main.elm --optimize --output=main.js && uglifyjs main.js --compress 'pure_funcs=\"F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9\",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output main.js",
     "release": "git checkout main && git push && git checkout gh-pages && git merge main --no-edit && yarn compile-min && git commit -am \"Publish updated version\" && git push"
   }

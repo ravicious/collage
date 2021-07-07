@@ -12,6 +12,9 @@ app.ports.sendImagesToJs.subscribe((files) => {
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
+// That seems to be the iOS limit.
+const maxCanvasArea = 4096 * 4096;
+
 const generateCollage = async (files) => {
   const image1 = await loadImage(files[0]);
   const image2 = await loadImage(files[1]);
@@ -81,18 +84,31 @@ function drawImages(image1, image2) {
   }
 
   console.log("Drawing image");
-  // We assume top right corner of the first image touches the top left corner of the second image.
-  canvas.width = image1.naturalWidth + image2.naturalWidth;
-  canvas.height = Math.max(image1.naturalHeight, image2.naturalHeight);
+
+  // We assume top right corner of the first image touches the top left corner of the second image,
+  // so let's calculate the dimensions accordingly.
+  const width = image1.naturalWidth + image2.naturalWidth;
+  const height = Math.max(image1.naturalHeight, image2.naturalHeight);
+  const area = width * height;
+  let scale = 1;
+
+  // Unfortunately, there's an area limit for <canvas> on iOS. Anyway, if we're stitching two big
+  // images together, we might actually want to scale down the resulting image.
+  if (area > maxCanvasArea) {
+    scale = Math.sqrt(maxCanvasArea) / Math.sqrt(area);
+  }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(scale, scale);
+  canvas.width = width * scale;
+  canvas.height = height * scale;
 
   // Draw background.
   ctx.fillStyle = "white";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.drawImage(image1, fx.value(), fy.value());
-  ctx.drawImage(image2, sx.value(), sy.value());
+  ctx.drawImage(image1, fx.value() * scale, fy.value() * scale);
+  ctx.drawImage(image2, sx.value() * scale, sy.value() * scale);
 }
 
 document.getElementById('download').addEventListener('click', function (event) {
