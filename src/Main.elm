@@ -71,7 +71,7 @@ view model =
                 ]
                 []
             ]
-        , div [] [ text (Debug.toString model) ]
+        , div [] [ text <| String.fromInt (List.length model) ++ " attachments" ]
         ]
 
 
