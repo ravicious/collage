@@ -4,24 +4,45 @@ const app = Elm.Main.init({
   node: document.getElementById('app-container')
 })
 
+app.ports.sendImagesToJs.subscribe((files) => {
+  console.log("Received files from elm", files)
+  generateCollage(files).catch(console.error)
+})
+
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
+const generateCollage = async (files) => {
+  const image1 = await loadImage(files[0]);
+  const image2 = await loadImage(files[1]);
 
-const image = new Image();
-image.onload = drawImage; // Draw when image has loaded
-image.src = 'test.jpg';
+  drawImages(image1, image2);
+}
 
-// Load an image of intrinsic size 300x227 in CSS pixels
-// image.src = 'https://mdn.mozillademos.org/files/5397/rhino.jpg';
+const loadImage = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
 
-function drawImage() {
+  reader.addEventListener("load", () => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = (error) => reject(error)
+    image.src = reader.result
+  }, false)
+
+  reader.addEventListener("error", () => {
+    reject(reader.error)
+  })
+
+  reader.readAsDataURL(file)
+})
+
+function drawImages(image1, image2) {
   console.log('Calculating sizes');
 
-  const fw = image.naturalWidth;
-  const fh = image.naturalHeight;
-  const sw = fw; // Hardcoding two identical images for now.
-  const sh = fh;
+  const fw = image1.naturalWidth;
+  const fh = image1.naturalHeight;
+  const sw = image2.naturalWidth;
+  const sh = image2.naturalWidth;
 
   // Create a solver
   var solver = new kiwi.Solver();
@@ -42,13 +63,13 @@ function drawImage() {
     ))
   }
 
-  // solver.addConstraint(new kiwi.Constraint(new kiwi.Expression([-1, right], left, width), kiwi.Operator.Eq));
+  // Top right corner of the first image should touch the top left corner of the second image.
   solver.addConstraint(new kiwi.Constraint(
     new kiwi.Expression(fx, fw, [-1, sx]),
     kiwi.Operator.Eq
   ))
   solver.addConstraint(new kiwi.Constraint(
-    new kiwi.Expression([-1, fy], sy, sh),
+    new kiwi.Expression([-1, fy], sy),
     kiwi.Operator.Eq
   ))
 
@@ -59,28 +80,21 @@ function drawImage() {
     console.log(`${key} = ${namedVariables[key].value()}`)
   }
 
-
-
   console.log("Drawing image");
-  // Use the intrinsic size of image in CSS pixels for the canvas element
-  canvas.width = image.naturalWidth * 3;
-  canvas.height = image.naturalHeight * 3;
+  // We assume top right corner of the first image touches the top left corner of the second image.
+  canvas.width = image1.naturalWidth + image2.naturalWidth;
+  canvas.height = Math.max(image1.naturalHeight, image2.naturalHeight);
 
-  ctx.fillStyle = "green";
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw background.
+  ctx.fillStyle = "white";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Will draw the image as 300x227, ignoring the custom size of 60x45
-  // given in the constructor
-  ctx.drawImage(image, fx.value(), fy.value());
-  ctx.drawImage(image, sx.value(), sy.value());
-  // ctx.drawImage(image, image.naturalWidth, 0);
-
-  // To use the custom size we'll have to specify the scale parameters
-  // using the element's width and height properties - lets draw one
-  // on top in the corner:
-  // ctx.drawImage(image, 0, 0, image.width, image.height);
+  ctx.drawImage(image1, fx.value(), fy.value());
+  ctx.drawImage(image2, sx.value(), sy.value());
 }
 
 document.getElementById('download').addEventListener('click', function (event) {
-  this.href = canvas.toDataURL('image/jpeg', 0.9);
+  this.href = canvas.toDataURL('image/jpeg');
 }, false);
