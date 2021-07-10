@@ -6,7 +6,6 @@
     <title>Collage</title>
     <meta name="description" content="Make simple collages with ease.">
     <script src="main.js"></script>
-    <script src="vendor/kiwi.min.js"></script>
     <style>
       body {
         background-color: #FEFEFE;
@@ -15,26 +14,14 @@
         background-position:0 0, 15px 15px;
       }
 
-      .flex {
-        display: flex;
-        flex-direction: column;
-        max-height: 100vh;
-      }
-
-      #canvas {
-        width: 100%;
-        flex: 1;
+      #result {
+        max-width: 100%;
       }
     </style>
   </head>
   <body>
     <div id="app-container"></div>
-    <div class="flex">
-      <div>
-        <a href="" id="download" download="canvas.jpg">Download canvas</a>
-      </div>
-      <canvas id="canvas"></canvas>
-    </div>
-    <script src="init.js"></script>
+    <img id="result" style="max-width: 100%;" />
+    <script type="module" src="init.js"></script>
   </body>
 </html>

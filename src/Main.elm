@@ -11,6 +11,9 @@ import Json.Decode as D
 port sendImagesToJs : List D.Value -> Cmd msg
 
 
+port imageProcessorStatus : (String -> msg) -> Sub msg
+
+
 main =
     Browser.element
         { init = init
@@ -25,12 +28,23 @@ main =
 
 
 type alias Model =
-    List D.Value
+    Status
+
+
+type Status
+    = AwaitingInput
+    | Processing
+    | Done
+    | Error ProcessingError
+
+
+type ProcessingError
+    = LessThanTwoImages
 
 
 init : () -> ( Model, Cmd a )
 init _ =
-    ( [], Cmd.none )
+    ( AwaitingInput, Cmd.none )
 
 
 
@@ -39,6 +53,7 @@ init _ =
 
 type Msg
     = GotFiles (List D.Value)
+    | ImageProcessorStatusUpdated
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -46,14 +61,18 @@ update msg model =
     case msg of
         GotFiles files ->
             if List.length files >= 2 then
-                ( files, sendImagesToJs <| List.take 2 files )
+                ( Processing, sendImagesToJs <| List.take 2 files )
 
             else
-                ( [], Cmd.none )
+                ( Error LessThanTwoImages, Cmd.none )
+
+        ImageProcessorStatusUpdated ->
+            ( Done, Cmd.none )
 
 
 subscriptions _ =
-    Sub.none
+    -- For now we only really handle the happy path, hence `always`.
+    imageProcessorStatus (always ImageProcessorStatusUpdated)
 
 
 
@@ -71,7 +90,20 @@ view model =
                 ]
                 []
             ]
-        , div [] [ text <| String.fromInt (List.length model) ++ " attachments" ]
+        , div []
+            [ case model of
+                AwaitingInput ->
+                    text ""
+
+                Processing ->
+                    text "Processing…"
+
+                Done ->
+                    text ""
+
+                Error LessThanTwoImages ->
+                    text "Can't make a collage with just one image"
+            ]
         ]
 
 
