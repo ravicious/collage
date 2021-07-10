@@ -16,10 +16,7 @@ pub fn setup() {
 }
 
 #[wasm_bindgen]
-pub fn process_images(
-    image_array1: js_sys::Uint8Array,
-    image_array2: js_sys::Uint8Array,
-) -> Vec<u8> {
+pub fn process_images(image_array1: Vec<u8>, image_array2: Vec<u8>) -> Vec<u8> {
     let image1 = array_to_image(image_array1);
     let image2 = array_to_image(image_array2);
 
@@ -54,8 +51,6 @@ pub fn process_images(
     jpg_buffer
 }
 
-fn array_to_image(array: js_sys::Uint8Array) -> RgbImage {
-    image::load_from_memory(&array.to_vec())
-        .unwrap()
-        .into_rgb8()
+fn array_to_image(array: Vec<u8>) -> RgbImage {
+    image::load_from_memory(&array).unwrap().into_rgb8()
 }
