@@ -2,7 +2,10 @@
 
 import {default as initWasm, setup, process_images} from './image-processor/pkg/image_processor.js';
 
-initWasm().then(() => setup());
+(async () => {
+  await initWasm();
+  setup();
+})();
 
 const app = Elm.Main.init({
   node: document.getElementById('app-container')
