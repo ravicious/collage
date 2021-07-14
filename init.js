@@ -15,8 +15,14 @@ app.ports.sendImagesToJs.subscribe((files) => {
   generateCollage(files).catch(console.error)
 })
 
+const resultImg = document.getElementById('result')
+resultImg.onload = function() {
+  console.log('revoking Object URL')
+  URL.revokeObjectURL(this.src);
+}
+
 const generateCollage = async (files) => {
-  document.getElementById('result').src = "";
+  resultImg.src = "";
 
   const imageArray1 = new Uint8Array(await files[0].arrayBuffer());
   const imageArray2 = new Uint8Array(await files[1].arrayBuffer());
@@ -25,7 +31,7 @@ const generateCollage = async (files) => {
   const resultArray = process_images(imageArray1, imageArray2);
   console.timeEnd('process_images');
 
-  document.getElementById('result').src = URL.createObjectURL(
+  resultImg.src = URL.createObjectURL(
     new Blob([resultArray.buffer], {type: 'image/jpg'})
   );
 
