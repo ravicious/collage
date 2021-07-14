@@ -4,3 +4,6 @@ elm-stuff
 repl-temp-*
 node_modules
 main.js
+
+# Test images taken from https://magnushoff.com/articles/jpeg-orientation/
+vendor/orientation-test/*
