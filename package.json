@@ -5,8 +5,7 @@
     "elm": "^0.19.1-5",
     "elm-format": "^0.8.5",
     "elm-live": "^4.0.2",
-    "uglify-js": "^3.13.10",
-    "wasm-pack": "^0.10.0"
+    "uglify-js": "^3.13.10"
   },
   "scripts": {
     "elm-server": "elm-live src/Main.elm --host 0.0.0.0 -- --debug --output=main.js",
