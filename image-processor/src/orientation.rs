@@ -5,7 +5,10 @@ use web_sys::console;
 
 pub fn fix_if_needed(raw_image: Vec<u8>) -> RgbImage {
     let orientation = get_orientation(&raw_image);
+
+    console::time_with_label("loading image from memory");
     let image = image::load_from_memory(&raw_image).unwrap().into_rgb8();
+    console::time_end_with_label("loading image from memory");
 
     match orientation {
         Ok(orientation_tag) => fix_orientation(image, orientation_tag),
@@ -58,6 +61,8 @@ fn log_reason_for_no_orientation_fix(reason: NoFixNeededReason) {
 
 // Naive implementation until I figure out how to use transformation matrices with the image crate.
 fn fix_orientation(mut image: RgbImage, orientation: u32) -> RgbImage {
+    console::time_with_label("fixing orientation");
+
     if orientation > 8 {
         return image;
     }
@@ -74,6 +79,8 @@ fn fix_orientation(mut image: RgbImage, orientation: u32) -> RgbImage {
     if orientation % 2 == 0 {
         imageops::flip_horizontal_in_place(&mut image);
     }
+
+    console::time_end_with_label("fixing orientation");
 
     image
 }
