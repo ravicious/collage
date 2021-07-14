@@ -7,6 +7,8 @@ git push
 git checkout gh-pages
 git merge main --no-edit
 git rev-parse --short HEAD > version.txt
+# git fails to recognize that version.txt was updated if we don't add it explicitly, weird…
+git add version.txt
 
 yarn compile-all
 
