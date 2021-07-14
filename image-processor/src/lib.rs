@@ -34,23 +34,9 @@ pub fn process_images(image_array1: Vec<u8>, image_array2: Vec<u8>) -> Vec<u8> {
         image1.height().max(image2.height()),
     );
 
-    // Fill target image with white color.
-    // TODO: Don't do this if both images have the same size. Could be optimize further but that's
-    // not important for now.
-    let white_buffer = FlatSamples {
-        samples: &[0xff],
-        layout: SampleLayout {
-            channels: 3,
-            channel_stride: 0,
-            width: target.width(),
-            width_stride: 0,
-            height: target.height(),
-            height_stride: 0,
-        },
-        color_hint: None,
-    };
-    let white_bg = white_buffer.as_view::<Rgb<u8>>().unwrap();
-    target.copy_from(&white_bg, 0, 0).unwrap();
+    if image1.dimensions() != image2.dimensions() {
+        fill_background(&mut target);
+    }
 
     target.copy_from(&image1, 0, 0).unwrap();
     target.copy_from(&image2, image1.width(), 0).unwrap();
@@ -66,4 +52,25 @@ pub fn process_images(image_array1: Vec<u8>, image_array2: Vec<u8>) -> Vec<u8> {
 
 fn array_to_image(array: Vec<u8>) -> RgbImage {
     orientation::fix_if_needed(array)
+}
+
+fn fill_background(image: &mut RgbImage) {
+    console::time_with_label("filling background");
+
+    let white_buffer = FlatSamples {
+        samples: &[0xff],
+        layout: SampleLayout {
+            channels: 3,
+            channel_stride: 0,
+            width: image.width(),
+            width_stride: 0,
+            height: image.height(),
+            height_stride: 0,
+        },
+        color_hint: None,
+    };
+    let white_bg = white_buffer.as_view::<Rgb<u8>>().unwrap();
+    image.copy_from(&white_bg, 0, 0).unwrap();
+
+    console::time_end_with_label("filling background");
 }
