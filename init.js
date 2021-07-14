@@ -21,7 +21,9 @@ const generateCollage = async (files) => {
   const imageArray1 = new Uint8Array(await files[0].arrayBuffer());
   const imageArray2 = new Uint8Array(await files[1].arrayBuffer());
 
+  console.time('process_images');
   const resultArray = process_images(imageArray1, imageArray2);
+  console.timeEnd('process_images');
 
   document.getElementById('result').src = URL.createObjectURL(
     new Blob([resultArray.buffer], {type: 'image/jpg'})
