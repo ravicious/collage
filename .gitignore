@@ -3,3 +3,6 @@ elm-stuff
 # elm-repl generated files
 repl-temp-*
 node_modules
+
+# Test images taken from https://magnushoff.com/articles/jpeg-orientation/
+vendor/orientation-test/*

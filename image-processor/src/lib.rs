@@ -1,3 +1,4 @@
+mod orientation;
 mod utils;
 
 use image::flat::{FlatSamples, SampleLayout};
@@ -26,6 +27,8 @@ pub fn process_images(image_array1: Vec<u8>, image_array2: Vec<u8>) -> Vec<u8> {
     );
 
     // Fill target image with white color.
+    // TODO: Don't do this if both images have the same size. Could be optimize further but that's
+    // not important for now.
     let white_buffer = FlatSamples {
         samples: &[0xff],
         layout: SampleLayout {
@@ -52,5 +55,5 @@ pub fn process_images(image_array1: Vec<u8>, image_array2: Vec<u8>) -> Vec<u8> {
 }
 
 fn array_to_image(array: Vec<u8>) -> RgbImage {
-    image::load_from_memory(&array).unwrap().into_rgb8()
+    orientation::fix_if_needed(array)
 }
