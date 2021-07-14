@@ -13,7 +13,6 @@
     "dev-server": "concurrently \"yarn run elm-server\" \"yarn run wasm-watch\"",
     "compile-wasm": "wasm-pack build --target web --release --no-typescript image-processor && rm image-processor/pkg/.gitignore",
     "compile-min-elm": "elm make src/Main.elm --optimize --output=main.js && uglifyjs main.js --compress 'pure_funcs=\"F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9\",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output main.js",
-    "compile-all": "yarn run compile-min-elm && yarn run compile-wasm",
-    "release": "git checkout main && git push && git checkout gh-pages && git merge main --no-edit && yarn compile-all && git commit -am \"Publish updated version\" && git push"
+    "compile-all": "yarn run compile-min-elm && yarn run compile-wasm"
   }
 }
