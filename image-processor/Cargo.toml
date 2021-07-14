@@ -37,7 +37,7 @@ features = [
 [dependencies.image]
 version = "0.23.14"
 default-features = false
-features = ["gif", "jpeg", "ico", "png", "pnm", "tga", "tiff", "webp", "bmp", "hdr", "dxt", "dds", "farbfeld"]
+features = ["gif", "jpeg", "png", "webp", "bmp"]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.13"
