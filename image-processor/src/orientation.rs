@@ -21,7 +21,7 @@ pub fn fix_if_needed(raw_image: Vec<u8>) -> RgbImage {
 
 #[derive(Debug)]
 enum NoFixNeededReason {
-    AleadyCorrect,
+    AlreadyCorrect,
     ParsingError(String),
     NoExif,
     NoOrientationTag,
@@ -42,7 +42,7 @@ fn get_orientation(raw_image: &[u8]) -> Result<u32, NoFixNeededReason> {
         .ok_or(NoFixNeededReason::NoOrientationTag)?;
 
     match exif_field.value.get_uint(0) {
-        Some(1) => Err(NoFixNeededReason::AleadyCorrect),
+        Some(1) => Err(NoFixNeededReason::AlreadyCorrect),
         Some(value @ 2..=8) => Ok(value),
         other => Err(NoFixNeededReason::InvalidOrientationTagValue(other)),
     }
@@ -52,7 +52,7 @@ fn log_reason_for_no_orientation_fix(reason: NoFixNeededReason) {
     use NoFixNeededReason::*;
 
     let log_function = match reason {
-        AleadyCorrect | NoExif | NoOrientationTag => console::log_1,
+        AlreadyCorrect | NoExif | NoOrientationTag => console::log_1,
         ParsingError(_) | InvalidOrientationTagValue(_) => console::error_1,
     };
 
