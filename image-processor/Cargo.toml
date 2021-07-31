@@ -46,3 +46,8 @@ wasm-bindgen-test = "0.3.13"
 # Tell `rustc` to optimize for small code size.
 opt-level = "s"
 lto = true
+
+# Uncomment to preserve function names for use with twiggy
+# https://github.com/rustwasm/wasm-pack/issues/797#issuecomment-619573355
+# [package.metadata.wasm-pack.profile.release]
+# wasm-opt = ['-O4', '-g']
