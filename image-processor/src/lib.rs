@@ -45,15 +45,17 @@ pub fn process_images(image_array1: Vec<u8>, image_array2: Vec<u8>) -> Vec<u8> {
     jpg_buffer
 }
 
-fn make_landscape(image1: RgbImage, image2: RgbImage) -> RgbImage {
+fn make_landscape(mut image1: RgbImage, mut image2: RgbImage) -> RgbImage {
+    if image1.dimensions() != image2.dimensions() {
+        console::time_with_label("fit height");
+        fit_height(&mut image1, &mut image2);
+        console::time_end_with_label("fit height");
+    }
+
     let mut target = RgbImage::new(
         image1.width() + image2.width(),
         image1.height().max(image2.height()),
     );
-
-    if image1.dimensions() != image2.dimensions() {
-        fill_background(&mut target);
-    }
 
     target.copy_from(&image1, 0, 0).unwrap();
     target.copy_from(&image2, image1.width(), 0).unwrap();
@@ -100,4 +102,30 @@ fn fill_background(image: &mut RgbImage) {
     image.copy_from(&white_bg, 0, 0).unwrap();
 
     console::time_end_with_label("filling background");
+}
+
+fn fit_height(image1: &mut RgbImage, image2: &mut RgbImage) {
+    use std::cmp::Ordering::*;
+    let taller;
+    let shorter;
+
+    match image1.height().cmp(&image2.height()) {
+        Greater => {
+            taller = image1;
+            shorter = image2;
+        }
+        _ => {
+            taller = image2;
+            shorter = image1;
+        }
+    }
+
+    // Scale the taller image down so that it has the same height as the shorter one.
+    let new_width = taller.width() * shorter.height() / taller.height();
+    *taller = image::imageops::resize(
+        taller,
+        new_width,
+        shorter.height(),
+        image::imageops::FilterType::Lanczos3,
+    );
 }
