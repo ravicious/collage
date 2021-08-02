@@ -84,10 +84,10 @@ view model =
         status =
             case model of
                 Processing ->
-                    span [] [ text "Processing ", span [ class "rotate" ] [ text "🌀" ] ]
+                    p [] [ text "Processing ", span [ class "rotate" ] [ text "🌝" ] ]
 
                 Error LessThanTwoImages ->
-                    text "Can't make a collage with just one image"
+                    p [] [ text "Can't make a collage with just one image" ]
 
                 _ ->
                     text ""
@@ -104,15 +104,13 @@ view model =
 
 
 fileInput =
-    Html.form []
-        [ input
-            [ type_ "file"
-            , accept "image/*"
-            , multiple True
-            , on "change" (D.map GotFiles filesDecoder)
-            ]
-            []
+    input
+        [ type_ "file"
+        , accept "image/*"
+        , multiple True
+        , on "change" (D.map GotFiles filesDecoder)
         ]
+        []
 
 
 filesDecoder : D.Decoder (List D.Value)
