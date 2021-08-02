@@ -3,8 +3,7 @@ mod orientation;
 mod utils;
 
 use crate::image_for_processing::{ImageForProcessing, PageOrientation::*};
-use image::flat::{FlatSamples, SampleLayout};
-use image::{GenericImage, Rgb, RgbImage};
+use image::{GenericImage, RgbImage};
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -63,15 +62,17 @@ fn make_landscape(mut image1: RgbImage, mut image2: RgbImage) -> RgbImage {
     target
 }
 
-fn make_portrait(image1: RgbImage, image2: RgbImage) -> RgbImage {
+fn make_portrait(mut image1: RgbImage, mut image2: RgbImage) -> RgbImage {
+    if image1.dimensions() != image2.dimensions() {
+        console::time_with_label("fit width");
+        fit_width(&mut image1, &mut image2);
+        console::time_end_with_label("fit width");
+    }
+
     let mut target = RgbImage::new(
         image1.width().max(image2.width()),
         image1.height() + image2.height(),
     );
-
-    if image1.dimensions() != image2.dimensions() {
-        fill_background(&mut target);
-    }
 
     target.copy_from(&image1, 0, 0).unwrap();
     target.copy_from(&image2, 0, image1.height()).unwrap();
@@ -81,27 +82,6 @@ fn make_portrait(image1: RgbImage, image2: RgbImage) -> RgbImage {
 
 fn array_to_image(array: Vec<u8>) -> RgbImage {
     orientation::fix_if_needed(array)
-}
-
-fn fill_background(image: &mut RgbImage) {
-    console::time_with_label("filling background");
-
-    let white_buffer = FlatSamples {
-        samples: &[0xff],
-        layout: SampleLayout {
-            channels: 3,
-            channel_stride: 0,
-            width: image.width(),
-            width_stride: 0,
-            height: image.height(),
-            height_stride: 0,
-        },
-        color_hint: None,
-    };
-    let white_bg = white_buffer.as_view::<Rgb<u8>>().unwrap();
-    image.copy_from(&white_bg, 0, 0).unwrap();
-
-    console::time_end_with_label("filling background");
 }
 
 fn fit_height(image1: &mut RgbImage, image2: &mut RgbImage) {
@@ -126,6 +106,32 @@ fn fit_height(image1: &mut RgbImage, image2: &mut RgbImage) {
         taller,
         new_width,
         shorter.height(),
+        image::imageops::FilterType::Lanczos3,
+    );
+}
+
+fn fit_width(image1: &mut RgbImage, image2: &mut RgbImage) {
+    use std::cmp::Ordering::*;
+    let wider;
+    let narrower;
+
+    match image1.width().cmp(&image2.width()) {
+        Greater => {
+            wider = image1;
+            narrower = image2;
+        }
+        _ => {
+            wider = image2;
+            narrower = image1;
+        }
+    }
+
+    // Scale the wider image down so that it has the same width as the narrower one.
+    let new_height = wider.height() * narrower.width() / wider.width();
+    *wider = image::imageops::resize(
+        wider,
+        narrower.width(),
+        new_height,
         image::imageops::FilterType::Lanczos3,
     );
 }
