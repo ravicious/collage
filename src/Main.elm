@@ -80,30 +80,38 @@ subscriptions _ =
 
 
 view model =
-    div []
-        [ Html.form []
-            [ input
-                [ type_ "file"
-                , accept "image/*"
-                , multiple True
-                , on "change" (D.map GotFiles filesDecoder)
-                ]
-                []
-            ]
-        , div []
-            [ case model of
-                AwaitingInput ->
-                    text ""
-
+    let
+        status =
+            case model of
                 Processing ->
-                    text "Processing…"
-
-                Done ->
-                    text ""
+                    span [] [ text "Processing ", span [ class "rotate" ] [ text "🌀" ] ]
 
                 Error LessThanTwoImages ->
                     text "Can't make a collage with just one image"
+
+                _ ->
+                    text ""
+    in
+    div []
+        [ case model of
+            Processing ->
+                text ""
+
+            _ ->
+                fileInput
+        , status
+        ]
+
+
+fileInput =
+    Html.form []
+        [ input
+            [ type_ "file"
+            , accept "image/*"
+            , multiple True
+            , on "change" (D.map GotFiles filesDecoder)
             ]
+            []
         ]
 
 
