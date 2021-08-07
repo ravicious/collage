@@ -13,7 +13,7 @@ use web_sys::console;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[wasm_bindgen]
+#[wasm_bindgen(start)]
 pub fn setup() {
     utils::set_panic_hook();
 }
