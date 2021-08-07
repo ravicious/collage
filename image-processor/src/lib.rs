@@ -19,7 +19,7 @@ pub fn setup() {
 }
 
 #[wasm_bindgen]
-pub fn process_images(image_array1: Vec<u8>, image_array2: Vec<u8>) -> Vec<u8> {
+pub fn process_images(image_array1: &[u8], image_array2: &[u8]) -> Vec<u8> {
     console::time_with_label("loading first image");
     let image1 = array_to_image(image_array1);
     console::time_end_with_label("loading first image");
@@ -80,7 +80,7 @@ fn make_portrait(mut image1: RgbImage, mut image2: RgbImage) -> RgbImage {
     target
 }
 
-fn array_to_image(array: Vec<u8>) -> RgbImage {
+fn array_to_image(array: &[u8]) -> RgbImage {
     orientation::fix_if_needed(array)
 }
 

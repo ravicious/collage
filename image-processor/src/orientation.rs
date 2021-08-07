@@ -3,11 +3,11 @@ use image::{imageops, RgbImage};
 use std::io::Cursor;
 use web_sys::console;
 
-pub fn fix_if_needed(raw_image: Vec<u8>) -> RgbImage {
-    let orientation = get_orientation(&raw_image);
+pub fn fix_if_needed(raw_image: &[u8]) -> RgbImage {
+    let orientation = get_orientation(raw_image);
 
     console::time_with_label("loading image from memory");
-    let image = image::load_from_memory(&raw_image).unwrap().into_rgb8();
+    let image = image::load_from_memory(raw_image).unwrap().into_rgb8();
     console::time_end_with_label("loading image from memory");
 
     match orientation {
