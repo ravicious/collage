@@ -19,32 +19,41 @@ pub fn setup() {
 }
 
 #[wasm_bindgen]
-pub fn process_images(image_array1: &[u8], image_array2: &[u8]) -> Vec<u8> {
-    console::time_with_label("loading first image");
-    let image1 = array_to_image(image_array1);
-    console::time_end_with_label("loading first image");
+pub fn process_images(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
+    let mut images: Vec<RgbImage> = image_arrays
+        .into_iter()
+        .enumerate()
+        .map(|(i, image_array)| {
+            console::group_1(&format!("processing image {}", i + 1).into());
+            console::time();
+            let result = array_to_image(&image_array.to_vec());
+            console::time_end();
+            console::group_end();
+            result
+        })
+        .collect();
 
-    console::time_with_label("loading second image");
-    let image2 = array_to_image(image_array2);
-    console::time_end_with_label("loading second image");
+    if let ([image1, image2], _) = images.split_at_mut(2) {
+        console::time_with_label("combining images");
 
-    console::time_with_label("combining images");
+        let target = match (image1.page_orientation(), image2.page_orientation()) {
+            (Landscape, Landscape) => make_portrait(image1, image2),
+            _ => make_landscape(image1, image2),
+        };
 
-    let target = match (image1.page_orientation(), image2.page_orientation()) {
-        (Landscape, Landscape) => make_portrait(image1, image2),
-        _ => make_landscape(image1, image2),
-    };
+        let mut jpg_buffer: Vec<u8> = vec![];
+        let mut jpg_encoder = image::jpeg::JpegEncoder::new(&mut jpg_buffer);
+        jpg_encoder.encode_image(&target).unwrap();
 
-    let mut jpg_buffer: Vec<u8> = vec![];
-    let mut jpg_encoder = image::jpeg::JpegEncoder::new(&mut jpg_buffer);
-    jpg_encoder.encode_image(&target).unwrap();
+        console::time_end_with_label("combining images");
 
-    console::time_end_with_label("combining images");
-
-    jpg_buffer
+        jpg_buffer
+    } else {
+        panic!("Less than two images received")
+    }
 }
 
-fn make_landscape(mut image1: RgbImage, mut image2: RgbImage) -> RgbImage {
+fn make_landscape(mut image1: &mut RgbImage, mut image2: &mut RgbImage) -> RgbImage {
     if image1.dimensions() != image2.dimensions() {
         console::time_with_label("fit height");
         fit_height(&mut image1, &mut image2);
@@ -56,13 +65,13 @@ fn make_landscape(mut image1: RgbImage, mut image2: RgbImage) -> RgbImage {
         image1.height().max(image2.height()),
     );
 
-    target.copy_from(&image1, 0, 0).unwrap();
-    target.copy_from(&image2, image1.width(), 0).unwrap();
+    target.copy_from(image1, 0, 0).unwrap();
+    target.copy_from(image2, image1.width(), 0).unwrap();
 
     target
 }
 
-fn make_portrait(mut image1: RgbImage, mut image2: RgbImage) -> RgbImage {
+fn make_portrait(mut image1: &mut RgbImage, mut image2: &mut RgbImage) -> RgbImage {
     if image1.dimensions() != image2.dimensions() {
         console::time_with_label("fit width");
         fit_width(&mut image1, &mut image2);
@@ -74,8 +83,8 @@ fn make_portrait(mut image1: RgbImage, mut image2: RgbImage) -> RgbImage {
         image1.height() + image2.height(),
     );
 
-    target.copy_from(&image1, 0, 0).unwrap();
-    target.copy_from(&image2, 0, image1.height()).unwrap();
+    target.copy_from(image1, 0, 0).unwrap();
+    target.copy_from(image2, 0, image1.height()).unwrap();
 
     target
 }
