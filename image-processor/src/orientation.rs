@@ -6,9 +6,9 @@ use web_sys::console;
 pub fn fix_if_needed(raw_image: &[u8]) -> RgbImage {
     let orientation = get_orientation(raw_image);
 
-    console::time_with_label("loading image from memory");
+    console::time_with_label("converting into RgbImage");
     let image = image::load_from_memory(raw_image).unwrap().into_rgb8();
-    console::time_end_with_label("loading image from memory");
+    console::time_end_with_label("converting into RgbImage");
 
     match orientation {
         Ok(orientation_tag) => fix_orientation(image, orientation_tag),
