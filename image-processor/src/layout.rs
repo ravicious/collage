@@ -15,9 +15,9 @@ pub struct Layout<'a> {
     graph: LayoutGraph<'a>,
 }
 
-pub type LayoutGraph<'a> = Graph<LayoutNode<'a>, ()>;
+pub type LayoutGraph<'a> = Graph<NodeLabel<'a>, ()>;
 
-pub enum LayoutNode<'a> {
+pub enum NodeLabel<'a> {
     Internal(SliceDirection),
     Leaf(&'a RgbImage),
 }
@@ -37,9 +37,9 @@ impl Distribution<SliceDirection> for Standard {
     }
 }
 
-impl std::fmt::Debug for LayoutNode<'_> {
+impl std::fmt::Debug for NodeLabel<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use LayoutNode::*;
+        use NodeLabel::*;
         match self {
             Leaf(image) => {
                 let dimensions = image.dimensions();
@@ -63,13 +63,13 @@ impl<'a> Layout<'a> {
         let mut rng = rand::thread_rng();
         let mut random_images = images.choose_multiple(&mut rng, images.len());
 
-        layout.graph.add_node(LayoutNode::Internal(rand::random()));
+        layout.graph.add_node(NodeLabel::Internal(rand::random()));
 
         // Total number of internal nodes must be equal to <number of images> - 1 and we already
         // added one internal node.
         for _ in 0..images.len() - 2 {
             let random_index = layout.random_index_of_node_with_less_than_two_children();
-            layout.add_node(random_index, LayoutNode::Internal(rand::random()));
+            layout.add_node(random_index, NodeLabel::Internal(rand::random()));
         }
 
         let indexes_of_nodes_with_less_than_two_children: Vec<NodeIndex> = layout
@@ -80,7 +80,7 @@ impl<'a> Layout<'a> {
             while layout.node_has_less_than_two_children(index) {
                 layout.add_node(
                     index,
-                    LayoutNode::Leaf(random_images.next().expect("Ran out of images")),
+                    NodeLabel::Leaf(random_images.next().expect("Ran out of images")),
                 );
             }
         }
@@ -107,14 +107,14 @@ impl<'a> Layout<'a> {
         self.graph.edges(idx).count() < 2
     }
 
-    fn add_node(&mut self, parent_idx: NodeIndex, layout_node: LayoutNode<'a>) -> NodeIndex {
-        let idx = self.graph.add_node(layout_node);
+    fn add_node(&mut self, parent_idx: NodeIndex, node_label: NodeLabel<'a>) -> NodeIndex {
+        let idx = self.graph.add_node(node_label);
         self.graph.update_edge(parent_idx, idx, ());
         idx
     }
 
     // For debugging the graph in Graphviz.
-    pub fn dot(&self) -> Dot<'_, &Graph<LayoutNode<'_>, ()>> {
+    pub fn dot(&self) -> Dot<'_, &Graph<NodeLabel<'_>, ()>> {
         Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
     }
 }
