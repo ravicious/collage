@@ -56,10 +56,10 @@ pub fn process_images(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
     }
 }
 
-fn make_landscape(mut image1: &mut RgbImage, mut image2: &mut RgbImage) -> RgbImage {
+fn make_landscape(image1: &mut RgbImage, image2: &mut RgbImage) -> RgbImage {
     if image1.dimensions() != image2.dimensions() {
         console::time_with_label("fit height");
-        fit_height(&mut image1, &mut image2);
+        fit_height(image1, image2);
         console::time_end_with_label("fit height");
     }
 
@@ -74,10 +74,10 @@ fn make_landscape(mut image1: &mut RgbImage, mut image2: &mut RgbImage) -> RgbIm
     target
 }
 
-fn make_portrait(mut image1: &mut RgbImage, mut image2: &mut RgbImage) -> RgbImage {
+fn make_portrait(image1: &mut RgbImage, image2: &mut RgbImage) -> RgbImage {
     if image1.dimensions() != image2.dimensions() {
         console::time_with_label("fit width");
-        fit_width(&mut image1, &mut image2);
+        fit_width(image1, image2);
         console::time_end_with_label("fit width");
     }
 
