@@ -1,4 +1,5 @@
 mod image_for_processing;
+pub mod layout;
 mod orientation;
 mod utils;
 

@@ -14,6 +14,9 @@ default = ["console_error_panic_hook"]
 wasm-bindgen = "0.2.75"
 js-sys = "0.3.51"
 kamadak-exif = "0.5.4"
+getrandom = { version = "0.2", features = ["js"] }
+rand = "0.8.4"
+petgraph = "0.6.0"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
