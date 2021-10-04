@@ -21,12 +21,14 @@ pub enum NodeLabel<'a> {
     Internal(SliceDirection),
     Leaf(&'a RgbImage),
 }
+use NodeLabel::*;
 
 #[derive(Debug)]
 pub enum SliceDirection {
     Vertical,
     Horizontal,
 }
+use SliceDirection::*;
 
 impl Distribution<SliceDirection> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> SliceDirection {
@@ -41,13 +43,11 @@ impl std::fmt::Debug for NodeLabel<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use NodeLabel::*;
         match self {
-            Leaf(image) => {
-                let dimensions = image.dimensions();
-                f.debug_tuple("Image")
-                    .field(&dimensions.0)
-                    .field(&dimensions.1)
-                    .finish()
-            }
+            Leaf(image) => f
+                .debug_tuple("Image")
+                .field(&image.width())
+                .field(&image.height())
+                .finish(),
             Internal(a) => {
                 write!(f, "{:?}", a)
             }
@@ -92,6 +92,10 @@ impl<'a> Layout<'a> {
         self.root_node().aspect_ratio()
     }
 
+    pub fn dimensions(&self) -> (u32, u32) {
+        self.root_node().dimensions()
+    }
+
     fn random_index_of_node_with_less_than_two_children(&self) -> NodeIndex {
         let mut rng = rand::thread_rng();
         self.indexes_of_nodes_with_less_than_two_children()
@@ -122,7 +126,7 @@ impl<'a> Layout<'a> {
 
         LayoutNode {
             index,
-            graph: &self.graph,
+            layout: self,
         }
     }
 
@@ -130,11 +134,33 @@ impl<'a> Layout<'a> {
     pub fn dot(&self) -> Dot<'_, &Graph<NodeLabel<'_>, ()>> {
         Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
     }
+
+    fn children(&self, node: &LayoutNode) -> Option<(LayoutNode, LayoutNode)> {
+        let mut iterator = self.graph.neighbors(node.index);
+
+        try {
+            (
+                iterator.next().map(|index| self.at_index(index))?,
+                iterator.next().map(|index| self.at_index(index))?,
+            )
+        }
+    }
+
+    fn node_label(&self, node: &LayoutNode) -> &NodeLabel {
+        self.graph.node_weight(node.index).unwrap()
+    }
+
+    fn at_index(&self, index: NodeIndex) -> LayoutNode {
+        LayoutNode {
+            index,
+            layout: self,
+        }
+    }
 }
 
 struct LayoutNode<'a> {
     index: NodeIndex,
-    graph: &'a LayoutGraph<'a>,
+    layout: &'a Layout<'a>,
 }
 
 impl LayoutNode<'_> {
@@ -159,25 +185,77 @@ impl LayoutNode<'_> {
         }
     }
 
+    pub fn dimensions(&self) -> (u32, u32) {
+        use std::cmp::Ordering::*;
+
+        match self.node_label() {
+            Leaf(image) => image.dimensions(),
+            Internal(Vertical) => {
+                let children = self.children().unwrap();
+                let taller;
+                let shorter;
+
+                match children.0.height().cmp(&children.1.height()) {
+                    Greater => {
+                        taller = children.0;
+                        shorter = children.1;
+                    }
+                    _ => {
+                        taller = children.1;
+                        shorter = children.0;
+                    }
+                }
+
+                let new_taller_width = taller.width() * shorter.height() / taller.height();
+                let width = new_taller_width + shorter.width();
+                let height = shorter.height();
+
+                (width, height)
+            }
+            Internal(Horizontal) => {
+                let children = self.children().unwrap();
+                let wider;
+                let narrower;
+
+                match children.0.width().cmp(&children.1.width()) {
+                    Greater => {
+                        wider = children.0;
+                        narrower = children.1;
+                    }
+                    _ => {
+                        wider = children.1;
+                        narrower = children.0;
+                    }
+                }
+
+                let new_wider_height = wider.height() * narrower.width() / wider.width();
+                let height = new_wider_height + narrower.height();
+                let width = narrower.width();
+
+                (width, height)
+            }
+        }
+    }
+
+    fn height(&self) -> u32 {
+        match self.node_label() {
+            Leaf(image) => image.height(),
+            _ => self.dimensions().1,
+        }
+    }
+
+    fn width(&self) -> u32 {
+        match self.node_label() {
+            Leaf(image) => image.width(),
+            _ => self.dimensions().0,
+        }
+    }
+
     fn node_label(&self) -> &NodeLabel {
-        self.graph.node_weight(self.index).unwrap()
+        self.layout.node_label(self)
     }
 
     fn children(&self) -> Option<(LayoutNode, LayoutNode)> {
-        let mut iterator = self.graph.neighbors(self.index);
-
-        try {
-            (
-                iterator.next().map(|index| self.at_index(index))?,
-                iterator.next().map(|index| self.at_index(index))?,
-            )
-        }
-    }
-
-    fn at_index(&self, index: NodeIndex) -> LayoutNode {
-        LayoutNode {
-            index,
-            graph: self.graph,
-        }
+        self.layout.children(self)
     }
 }

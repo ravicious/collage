@@ -7,11 +7,11 @@ fn main() {
     let mut images = vec![];
 
     for i in 0..6 {
-        images.push(RgbImage::new(i + 1, 1));
+        images.push(RgbImage::new(i * 100 + 100, 1000));
     }
 
     let layout = Layout::new(&images);
 
     println!("{:?}", layout.dot());
-    println!("Aspect ratio: {}", layout.aspect_ratio());
+    println!("Dimensions: {:?}", layout.dimensions());
 }
