@@ -2,7 +2,7 @@ use image::RgbImage;
 use petgraph::{
     dot::{Config, Dot},
     graph::NodeIndex,
-    Graph,
+    Direction, Graph,
 };
 use rand::{
     distributions::{Distribution, Standard},
@@ -88,6 +88,10 @@ impl<'a> Layout<'a> {
         layout
     }
 
+    pub fn aspect_ratio(&self) -> f64 {
+        self.root_node().aspect_ratio()
+    }
+
     fn random_index_of_node_with_less_than_two_children(&self) -> NodeIndex {
         let mut rng = rand::thread_rng();
         self.indexes_of_nodes_with_less_than_two_children()
@@ -113,8 +117,67 @@ impl<'a> Layout<'a> {
         idx
     }
 
+    fn root_node(&self) -> LayoutNode {
+        let index = self.graph.externals(Direction::Incoming).next().unwrap();
+
+        LayoutNode {
+            index,
+            graph: &self.graph,
+        }
+    }
+
     // For debugging the graph in Graphviz.
     pub fn dot(&self) -> Dot<'_, &Graph<NodeLabel<'_>, ()>> {
         Dot::with_config(&self.graph, &[Config::EdgeNoLabel])
+    }
+}
+
+struct LayoutNode<'a> {
+    index: NodeIndex,
+    graph: &'a LayoutGraph<'a>,
+}
+
+impl LayoutNode<'_> {
+    fn aspect_ratio(&self) -> f64 {
+        use NodeLabel::*;
+        use SliceDirection::*;
+
+        match self.node_label() {
+            Leaf(image) => f64::from(image.width()) / f64::from(image.height()),
+            Internal(direction) => match direction {
+                Vertical => {
+                    let children = self.children().unwrap();
+
+                    children.0.aspect_ratio() + children.1.aspect_ratio()
+                }
+                Horizontal => {
+                    let children = self.children().unwrap();
+
+                    1.0 / (1.0 / children.0.aspect_ratio() + 1.0 / children.1.aspect_ratio())
+                }
+            },
+        }
+    }
+
+    fn node_label(&self) -> &NodeLabel {
+        self.graph.node_weight(self.index).unwrap()
+    }
+
+    fn children(&self) -> Option<(LayoutNode, LayoutNode)> {
+        let mut iterator = self.graph.neighbors(self.index);
+
+        try {
+            (
+                iterator.next().map(|index| self.at_index(index))?,
+                iterator.next().map(|index| self.at_index(index))?,
+            )
+        }
+    }
+
+    fn at_index(&self, index: NodeIndex) -> LayoutNode {
+        LayoutNode {
+            index,
+            graph: self.graph,
+        }
     }
 }

@@ -13,4 +13,5 @@ fn main() {
     let layout = Layout::new(&images);
 
     println!("{:?}", layout.dot());
+    println!("Aspect ratio: {}", layout.aspect_ratio());
 }

@@ -1,3 +1,5 @@
+#![feature(try_blocks)]
+
 mod image_for_processing;
 pub mod layout;
 mod orientation;
