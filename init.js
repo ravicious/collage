@@ -19,11 +19,12 @@ resultImg.onload = function() {
 const generateCollage = async (files) => {
   resultImg.src = "";
 
-  const imageArray1 = new Uint8Array(await files[0].arrayBuffer());
-  const imageArray2 = new Uint8Array(await files[1].arrayBuffer());
+  const imageArrays = await Promise.all(
+    files.map((file) => file.arrayBuffer().then((buffer) => new Uint8Array(buffer)))
+  )
 
   console.time('process_images');
-  const resultArray = await process_images(imageArray1, imageArray2);
+  const resultArray = await process_images(imageArrays);
   console.timeEnd('process_images');
 
   resultImg.src = URL.createObjectURL(
@@ -35,11 +36,11 @@ const generateCollage = async (files) => {
 
 // Wrapping the message passing in a promise.
 // The worker code is simple enough that we can let ourselves do that.
-const process_images = (imageArray1, imageArray2) => new Promise((resolve, reject) => {
+const process_images = (imageArrays) => new Promise((resolve, reject) => {
   worker.onmessage = (event) => {
     resolve(event.data)
   }
-  worker.postMessage([imageArray1, imageArray2], [imageArray1.buffer, imageArray2.buffer])
+  worker.postMessage(imageArrays, imageArrays.map((imageArray) => imageArray.buffer))
 })
 
 const orientationTest = async () => {
@@ -52,7 +53,7 @@ const orientationTest = async () => {
   const pairs = [[1, 2], [3, 4], [5, 6], [7, 8]];
 
   for (const [n1, n2] of pairs) {
-    const result = await process_images(await loadFile(n1), await loadFile(n2));
+    const result = await process_images([await loadFile(n1), await loadFile(n2)]);
     const img = document.createElement('img');
     img.onload = function() {
       URL.revokeObjectURL(this.src);

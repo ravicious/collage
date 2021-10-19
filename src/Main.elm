@@ -61,7 +61,7 @@ update msg model =
     case msg of
         GotFiles files ->
             if List.length files >= 2 then
-                ( Processing, sendImagesToJs <| List.take 2 files )
+                ( Processing, sendImagesToJs files )
 
             else
                 ( Error LessThanTwoImages, Cmd.none )

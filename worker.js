@@ -3,14 +3,11 @@
 importScripts('image-processor/pkg/image_processor.js');
 
 const initWasm = wasm_bindgen;
-const {setup, process_images} = wasm_bindgen;
+const {process_images} = wasm_bindgen;
 
-(async () => {
-  await initWasm('image-processor/pkg/image_processor_bg.wasm');
-  setup();
-})();
+initWasm('image-processor/pkg/image_processor_bg.wasm');
 
 onmessage = function(event) {
-  const result = process_images(event.data[0], event.data[1]);
+  const result = process_images(event.data);
   postMessage(result, [result.buffer]);
 }
