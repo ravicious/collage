@@ -17,6 +17,7 @@ kamadak-exif = "0.5.4"
 getrandom = { version = "0.2", features = ["js"] }
 rand = "0.8.4"
 petgraph = "0.6.0"
+itertools = "0.10.1"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
