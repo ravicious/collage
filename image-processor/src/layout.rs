@@ -102,6 +102,30 @@ impl<'a> Layout<'a> {
     self.root_node().dimensions().to_tuple()
   }
 
+  // Smaller value is better.
+  pub fn cost(&self) -> f64 {
+    let number_of_images = self.leaf_nodes().count() as f64;
+    let coverage_of_canvas_area = 1.0
+      - self
+        .leaf_nodes()
+        .map(|leaf_node| {
+          leaf_node.dimensions().size() as f64 / self.canvas_dimensions.size() as f64
+        })
+        .sum::<f64>();
+    let scale_factor = self
+      .leaf_nodes()
+      .map(|leaf_node| {
+        let original_image_size =
+          Dimensions::from_tuple(leaf_node.image().unwrap().dimensions()).size() as f64;
+        let scaled_image_size = leaf_node.dimensions().size() as f64;
+
+        (scaled_image_size - original_image_size).abs() / original_image_size
+      })
+      .sum::<f64>();
+
+    scale_factor + number_of_images * coverage_of_canvas_area
+  }
+
   fn calculate_random_canvas_dimensions(images: &'a [RgbImage]) -> Dimensions {
     let mut rng = rand::thread_rng();
     let len_for_width = rng.gen_range(1..=images.len());
@@ -252,8 +276,19 @@ pub struct Dimensions {
 }
 
 impl Dimensions {
+  fn from_tuple(tuple: (u32, u32)) -> Dimensions {
+    Dimensions {
+      width: tuple.0,
+      height: tuple.1,
+    }
+  }
+
   fn to_tuple(self) -> (u32, u32) {
     (self.width, self.height)
+  }
+
+  fn size(&self) -> u32 {
+    self.width * self.height
   }
 }
 
