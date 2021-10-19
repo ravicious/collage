@@ -42,7 +42,17 @@ pub fn process_images(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
 
   if images.len() > 2 {
     console::time_with_label("generating random layout");
-    let layout = Layout::new(&images);
+    let mut layout = Layout::new(&images);
+    let mut layout_cost = layout.cost();
+    for _ in 0..100_000 {
+      let new_layout = Layout::new(&images);
+      let new_layout_cost = new_layout.cost();
+
+      if new_layout_cost < layout_cost {
+        layout = new_layout;
+        layout_cost = new_layout_cost;
+      }
+    }
     console::time_end_with_label("generating random layout");
 
     console::time_with_label("rendering layout");
@@ -53,6 +63,7 @@ pub fn process_images(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
     console::log_1(&format!("{:?}", layout.dot()).into());
     console::log_1(&format!("Canvas dimensions: {:?}", layout.canvas_dimensions).into());
     console::log_1(&format!("Dimensions: {:?}", layout.dimensions()).into());
+    console::log_1(&format!("Cost: {}", layout.cost()).into());
     console::group_end();
   } else if let ([image1, image2], _) = images.split_at_mut(2) {
     console::time_with_label("combining two images");

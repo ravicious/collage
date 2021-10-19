@@ -11,12 +11,8 @@ app.ports.sendImagesToJs.subscribe((files) => {
   generateCollage(files).catch(console.error)
 })
 
-resultImg.onload = function() {
-  console.log('revoking Object URL')
-  URL.revokeObjectURL(this.src);
-}
-
 const generateCollage = async (files) => {
+  URL.revokeObjectURL(resultImg.src);
   resultImg.src = "";
 
   const imageArrays = await Promise.all(
