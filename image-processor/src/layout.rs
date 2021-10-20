@@ -276,18 +276,18 @@ pub struct Dimensions {
 }
 
 impl Dimensions {
-  fn from_tuple(tuple: (u32, u32)) -> Dimensions {
+  pub fn from_tuple(tuple: (u32, u32)) -> Dimensions {
     Dimensions {
       width: tuple.0,
       height: tuple.1,
     }
   }
 
-  fn to_tuple(self) -> (u32, u32) {
+  pub fn to_tuple(self) -> (u32, u32) {
     (self.width, self.height)
   }
 
-  fn size(&self) -> u32 {
+  pub fn size(&self) -> u32 {
     self.width * self.height
   }
 }
@@ -302,7 +302,7 @@ impl<'a> LayoutNode<'a> {
     use SliceDirection::*;
 
     match self.node_label() {
-      Leaf(image) => f64::from(image.width()) / f64::from(image.height()),
+      Leaf(image) => image.width() as f64 / image.height() as f64,
       Internal(direction) => match direction {
         Vertical => {
           let children = self.children().unwrap();
