@@ -59,8 +59,10 @@ pub fn process_images(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
     target = renderer::render_layout(&layout);
     console::time_end_with_label("rendering layout");
 
-    console::group_collapsed_1(&"Layout debug".into());
+    console::group_1(&"Layout debug".into());
+    console::group_collapsed_1(&"Dot".into());
     console::log_1(&format!("{:?}", layout.dot()).into());
+    console::group_end();
     console::log_1(&format!("Canvas dimensions: {:?}", layout.canvas_dimensions).into());
     console::log_1(&format!("Dimensions: {:?}", layout.dimensions()).into());
     console::log_1(&format!("Cost: {}", layout.cost()).into());
