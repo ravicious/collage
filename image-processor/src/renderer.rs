@@ -23,20 +23,22 @@ pub fn render_layout(layout: &Layout) -> RgbImage {
   for leaf_node in layout.leaf_nodes() {
     let mut coords = Point { x: 0, y: 0 };
     for (parent, child) in leaf_node.lineage().iter().tuple_windows() {
-      let other_child = parent.other_child(child).unwrap();
+      let other_child_dimensions = parent.other_child(child).unwrap().dimensions();
       let child_side = parent.child_side(child).unwrap();
 
       match (parent.node_label(), child_side) {
-        (Internal(Horizontal), Right) => coords.y += other_child.height(),
-        (Internal(Vertical), Right) => coords.x += other_child.width(),
+        (Internal(Horizontal), Right) => coords.y += other_child_dimensions.height,
+        (Internal(Vertical), Right) => coords.x += other_child_dimensions.width,
         _ => {}
       }
     }
 
+    let dimensions = leaf_node.dimensions();
+
     let resized_image = image::imageops::resize(
       leaf_node.image().unwrap(),
-      leaf_node.width(),
-      leaf_node.height(),
+      dimensions.width,
+      dimensions.height,
       image::imageops::FilterType::Lanczos3,
     );
 
