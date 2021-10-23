@@ -252,7 +252,9 @@ impl<'a> Layout<'a> {
             .unwrap()
     }
 
-    fn indexes_of_nodes_with_less_than_two_children(&self) -> impl Iterator<Item = NodeIndex> + '_ {
+    fn indexes_of_nodes_with_less_than_two_children(
+        &self,
+    ) -> impl Iterator<Item = NodeIndex> + '_ {
         self.graph
             .node_indices()
             .filter(move |idx| self.graph.edges(*idx).count() < 2)
@@ -272,6 +274,13 @@ impl<'a> Layout<'a> {
         let index = self.graph.externals(Direction::Incoming).next().unwrap();
 
         LayoutNode::new(self, index)
+    }
+
+    pub fn internal_nodes(&self) -> impl Iterator<Item = LayoutNode> + '_ {
+        self.graph
+            .node_indices()
+            .filter(|idx| self.graph.edges(*idx).count() == 2)
+            .map(|idx| self.at_index(idx))
     }
 
     pub fn leaf_nodes(&self) -> impl Iterator<Item = LayoutNode> + '_ {
@@ -373,7 +382,7 @@ where
 }
 
 pub struct LayoutNode<'a> {
-    index: NodeIndex,
+    pub index: NodeIndex,
     layout: &'a Layout<'a>,
 }
 

@@ -1,6 +1,7 @@
 use crate::layout::{ChildSide::*, Layout, NodeLabel::*, SliceDirection::*};
 use image::{GenericImage, RgbImage};
 use itertools::Itertools;
+use web_sys::console;
 
 #[derive(Debug)]
 struct Point {
@@ -19,6 +20,19 @@ pub fn render_layout(layout: &Layout) -> RgbImage {
         layout.canvas_dimensions.width,
         layout.canvas_dimensions.height,
     );
+
+    for internal_node in layout.internal_nodes() {
+        console::log_1(
+            &format!(
+                "{:?}, {:?}, {:?}, {}",
+                internal_node.index,
+                internal_node.node_label(),
+                internal_node.dimensions().to_tuple(),
+                internal_node.aspect_ratio()
+            )
+            .into(),
+        );
+    }
 
     for leaf_node in layout.leaf_nodes() {
         let mut coords = Point { x: 0, y: 0 };
@@ -40,6 +54,18 @@ pub fn render_layout(layout: &Layout) -> RgbImage {
             dimensions.width,
             dimensions.height,
             image::imageops::FilterType::Lanczos3,
+        );
+
+        console::log_1(
+            &format!(
+                "{:?}, {:?}, {:?}, {:?}, {}",
+                leaf_node.index,
+                leaf_node.node_label(),
+                dimensions.to_tuple(),
+                coords,
+                leaf_node.aspect_ratio()
+            )
+            .into(),
         );
 
         result
