@@ -11,6 +11,18 @@ app.ports.sendImagesToJs.subscribe((files) => {
   generateCollage(files).catch(console.error)
 })
 
+worker.onmessage = (event) => {
+  if (event.data[0] == 'ready') {
+    if (window.location.hash.includes("blueprintLayoutTest")) {
+      blueprintLayoutTest()
+    }
+
+    if (window.location.hash.includes("randomLayoutTest")) {
+      randomLayoutTest()
+    }
+  }
+}
+
 const generateCollage = async (files) => {
   URL.revokeObjectURL(resultImg.src);
   resultImg.src = "";
@@ -72,7 +84,7 @@ const orientationTest = async () => {
   console.timeEnd('orientation test');
 }
 
-const layoutTest = async () => {
+const blueprintLayoutTest = async () => {
   const loadFile = (n) => fetch(`test-images/${n}`)
     .then((response) => response.blob())
     .then((blob) => blob.arrayBuffer())
@@ -128,4 +140,15 @@ const layoutTest = async () => {
   resultImg.src = URL.createObjectURL(
     new Blob([resultArray.buffer], {type: 'image/jpg'})
   );
+}
+
+const randomLayoutTest = async () => {
+  const loadFile = (n) => fetch(`test-images/${n}`)
+    .then((response) => response.blob());
+
+  const files = await Promise.all([
+    '140.jpg', '175.jpg', '220.jpg', '192.jpg', '302.jpg', '200.jpg', '170.jpg'
+  ].map((name) => loadFile(name)))
+
+  generateCollage(files).catch(console.error)
 }
