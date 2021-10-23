@@ -10,8 +10,16 @@ use rand::{
   seq::IteratorRandom,
   Rng,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::ptr;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LayoutBlueprint {
+  graph_representation: Vec<(String, Vec<usize>)>,
+  width: u32,
+  height: u32,
+}
 
 #[derive(Debug)]
 pub struct Layout<'a> {
@@ -21,16 +29,19 @@ pub struct Layout<'a> {
 
 pub type LayoutGraph<'a> = Graph<NodeLabel<'a>, ()>;
 
+#[derive(PartialEq)]
 pub enum NodeLabel<'a> {
   Internal(SliceDirection),
   Leaf(&'a RgbImage),
 }
+use NodeLabel::*;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SliceDirection {
   Vertical,
   Horizontal,
 }
+use SliceDirection::*;
 
 impl Distribution<SliceDirection> for Standard {
   fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> SliceDirection {
@@ -92,6 +103,92 @@ impl<'a> Layout<'a> {
     }
 
     layout
+  }
+
+  // The blueprint's graph representation in the form of Vec<(String, Vec<usize>)> shows how the
+  // internal nodes are laid out:
+  //
+  //    * The first element of the tuple indicates slice direction, "V" or "H".
+  //    * The second element is an array of indices to child nodes from the same main Vec.
+  //
+  // So, a graph representation of this form in JavaScript…
+  //
+  //     [
+  //       ["V",  [1, 2]],
+  //       ["H"], [ ]],
+  //       ["V"], [ ]],
+  //     ]
+  //
+  // …represents a graph which looks like this:
+  //
+  //          ┌───┐
+  //          │ V │
+  //          └───┘
+  //            │
+  //      ┌─────┴─────┐
+  //      ▼           ▼
+  //    ┌───┐       ┌───┐
+  //    │ H │       │ V │
+  //    └───┘       └───┘
+  //
+  // Then the images are sequentially added as leaf nodes to any internal node that has less than
+  // two children, starting from the first added node to the last added node.
+  pub fn from_blueprint(
+    blueprint: &LayoutBlueprint,
+    images: &'a [RgbImage],
+  ) -> Result<Self, String> {
+    let graph = LayoutGraph::new();
+    let canvas_dimensions = Dimensions {
+      width: blueprint.width,
+      height: blueprint.height,
+    };
+    let mut graph_indices: Vec<NodeIndex> =
+      Vec::with_capacity(blueprint.graph_representation.len());
+    let mut layout = Layout {
+      graph,
+      canvas_dimensions,
+    };
+
+    // Add internal nodes from the blueprint.
+    for (label_code, _) in blueprint.graph_representation.iter() {
+      let label = match label_code.as_str() {
+        "V" => Internal(Vertical),
+        "H" => Internal(Horizontal),
+        _ => {
+          return Err(format!(
+            "Unknown label in graph representation: {:?}",
+            label_code
+          ));
+        }
+      };
+
+      graph_indices.push(layout.graph.add_node(label))
+    }
+
+    // Add edges between internal nodes based on the blueprint.
+    for (parent_i, (_, child_indices)) in blueprint.graph_representation.iter().enumerate() {
+      for child_i in child_indices {
+        layout
+          .graph
+          .update_edge(graph_indices[parent_i], graph_indices[*child_i], ());
+      }
+    }
+
+    // Add images as leafs to nodes with less than two children, starting from the first added node
+    // to the last one.
+    let indexes_of_nodes_with_less_than_two_children: Vec<NodeIndex> = layout
+      .indexes_of_nodes_with_less_than_two_children()
+      .collect();
+    let mut images_iter = images.iter();
+
+    for index in indexes_of_nodes_with_less_than_two_children {
+      while layout.node_has_less_than_two_children(index) {
+        let image = images_iter.next().ok_or("Ran out of images")?;
+        layout.add_node(index, NodeLabel::Leaf(image));
+      }
+    }
+
+    Ok(layout)
   }
 
   pub fn aspect_ratio(&self) -> f64 {
@@ -249,6 +346,36 @@ impl<'a> Layout<'a> {
   }
 }
 
+impl PartialEq for Layout<'_> {
+  fn eq(&self, other: &Self) -> bool {
+    self.canvas_dimensions == other.canvas_dimensions && graph_eq(&self.graph, &other.graph)
+  }
+}
+
+// Taken from https://github.com/petgraph/petgraph/issues/199#issuecomment-484077775
+fn graph_eq<N, E, Ty, Ix>(
+  a: &petgraph::Graph<N, E, Ty, Ix>,
+  b: &petgraph::Graph<N, E, Ty, Ix>,
+) -> bool
+where
+  N: PartialEq,
+  E: PartialEq,
+  Ty: petgraph::EdgeType,
+  Ix: petgraph::graph::IndexType + PartialEq,
+{
+  let a_ns = a.raw_nodes().iter().map(|n| &n.weight);
+  let b_ns = b.raw_nodes().iter().map(|n| &n.weight);
+  let a_es = a
+    .raw_edges()
+    .iter()
+    .map(|e| (e.source(), e.target(), &e.weight));
+  let b_es = b
+    .raw_edges()
+    .iter()
+    .map(|e| (e.source(), e.target(), &e.weight));
+  a_ns.eq(b_ns) && a_es.eq(b_es)
+}
+
 pub struct LayoutNode<'a> {
   index: NodeIndex,
   layout: &'a Layout<'a>,
@@ -269,7 +396,7 @@ impl PartialEq for LayoutNode<'_> {
   }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Dimensions {
   pub width: u32,
   pub height: u32,
@@ -398,4 +525,170 @@ impl<'a> LayoutNode<'a> {
 pub enum ChildSide {
   Left,
   Right,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn comparing_layouts_with_equal_dimensions() {
+    let layout_1 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    let layout_2 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+
+    assert_eq!(layout_1, layout_2);
+  }
+
+  #[test]
+  fn comparing_layouts_with_different_dimensions() {
+    let layout_1 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    let layout_2 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((3, 7)),
+    };
+
+    assert_ne!(layout_1, layout_2);
+  }
+
+  #[test]
+  fn compare_layouts_with_the_same_single_node() {
+    let mut layout_1 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    let mut layout_2 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    layout_1.graph.add_node(Internal(Vertical));
+    layout_2.graph.add_node(Internal(Vertical));
+
+    assert_eq!(layout_1, layout_2);
+  }
+
+  #[test]
+  fn compare_layouts_with_different_single_node() {
+    let mut layout_1 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    let mut layout_2 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    layout_1.graph.add_node(Internal(Vertical));
+    layout_2.graph.add_node(Internal(Horizontal));
+
+    assert_ne!(layout_1, layout_2);
+  }
+
+  #[test]
+  fn compare_layouts_with_equal_leaf_nodes() {
+    let mut layout_1 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    let mut layout_2 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    let image_1 = RgbImage::new(1, 1);
+    let image_2 = RgbImage::new(2, 2);
+
+    let root_index_1 = layout_1.graph.add_node(Internal(Vertical));
+    layout_1.add_node(root_index_1, Leaf(&image_1));
+    layout_1.add_node(root_index_1, Leaf(&image_2));
+
+    let root_index_2 = layout_2.graph.add_node(Internal(Vertical));
+    layout_2.add_node(root_index_2, Leaf(&image_1));
+    layout_2.add_node(root_index_2, Leaf(&image_2));
+
+    assert_eq!(layout_1, layout_2);
+  }
+
+  #[test]
+  fn compare_layouts_with_different_leaf_nodes() {
+    let mut layout_1 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    let mut layout_2 = Layout {
+      graph: LayoutGraph::new(),
+      canvas_dimensions: Dimensions::from_tuple((1, 1)),
+    };
+    let image_1 = RgbImage::new(1, 1);
+    let image_2 = RgbImage::new(2, 2);
+
+    let root_index_1 = layout_1.graph.add_node(Internal(Vertical));
+    layout_1.add_node(root_index_1, Leaf(&image_1));
+    layout_1.add_node(root_index_1, Leaf(&image_2));
+
+    // layout_2 refers to the same images, but has them in different order.
+    let root_index_2 = layout_2.graph.add_node(Internal(Vertical));
+    layout_2.add_node(root_index_2, Leaf(&image_2));
+    layout_2.add_node(root_index_2, Leaf(&image_1));
+
+    assert_ne!(layout_1, layout_2);
+  }
+
+  #[test]
+  fn create_layout_from_blueprint() {
+    // digraph {
+    //     0 [ label = "Vertical"     ]
+    //     1 [ label = "Horizontal"   ]
+    //     2 [ label = "Image(5, 10)" ]
+    //     3 [ label = "Image(2, 2)"  ]
+    //     4 [ label = "Image(2, 4)"  ]
+    //     0 -> 1 [ ]
+    //     0 -> 2 [ ]
+    //     1 -> 3 [ ]
+    //     1 -> 4 [ ]
+    // }
+    let blueprint = LayoutBlueprint {
+      graph_representation: vec![(String::from("V"), vec![1]), (String::from("H"), vec![])],
+      width: 10,
+      height: 10,
+    };
+    let images = vec![
+      RgbImage::new(5, 10),
+      RgbImage::new(2, 2),
+      RgbImage::new(2, 4),
+    ];
+    let layout_from_blueprint = Layout::from_blueprint(&blueprint, &images);
+
+    // Expected layout, manually crafted.
+    let graph = LayoutGraph::new();
+    let canvas_dimensions = Dimensions::from_tuple((10, 10));
+    let mut expected_layout = Layout {
+      graph,
+      canvas_dimensions,
+    };
+    let v_index = expected_layout.graph.add_node(Internal(Vertical));
+    let h_index = expected_layout.graph.add_node(Internal(Horizontal));
+    let image_0_index = expected_layout.graph.add_node(Leaf(&images[0]));
+    let image_1_index = expected_layout.graph.add_node(Leaf(&images[1]));
+    let image_2_index = expected_layout.graph.add_node(Leaf(&images[2]));
+
+    expected_layout.graph.update_edge(v_index, h_index, ());
+    expected_layout
+      .graph
+      .update_edge(v_index, image_0_index, ());
+    expected_layout
+      .graph
+      .update_edge(h_index, image_1_index, ());
+    expected_layout
+      .graph
+      .update_edge(h_index, image_2_index, ());
+
+    assert_eq!(Ok(expected_layout), layout_from_blueprint);
+  }
 }
