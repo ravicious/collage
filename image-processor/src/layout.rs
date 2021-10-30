@@ -21,7 +21,7 @@ pub struct LayoutBlueprint {
     height: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Layout<'a> {
     graph: LayoutGraph<'a>,
     pub canvas_dimensions: Dimensions,
@@ -29,14 +29,14 @@ pub struct Layout<'a> {
 
 pub type LayoutGraph<'a> = Graph<NodeLabel<'a>, ()>;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum NodeLabel<'a> {
     Internal(SliceDirection),
     Leaf(&'a RgbImage),
 }
 use NodeLabel::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SliceDirection {
     Vertical,
     Horizontal,
@@ -225,8 +225,8 @@ impl<'a> Layout<'a> {
 
     fn calculate_random_canvas_dimensions(images: &'a [RgbImage]) -> Dimensions {
         let mut rng = rand::thread_rng();
-        let len_for_width = rng.gen_range(1..=images.len());
-        let len_for_height = rng.gen_range(1..=images.len());
+        let len_for_width = rng.gen_range(1, images.len() + 1);
+        let len_for_height = rng.gen_range(1, images.len() + 1);
         let width = images
             .choose_multiple(&mut rng, len_for_width)
             .map(|i| i.width())
@@ -379,6 +379,7 @@ where
     a_ns.eq(b_ns) && a_es.eq(b_es)
 }
 
+#[derive(Clone)]
 pub struct LayoutNode<'a> {
     pub index: NodeIndex,
     layout: &'a Layout<'a>,

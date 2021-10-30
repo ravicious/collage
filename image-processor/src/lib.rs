@@ -1,5 +1,7 @@
 #![feature(try_blocks)]
+#![feature(total_cmp)]
 
+mod algorithm;
 mod image_for_processing;
 pub mod layout;
 mod orientation;
@@ -42,17 +44,7 @@ pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
 
     if images.len() > 2 {
         console::time_with_label("generating random layout");
-        let mut layout = Layout::new(&images);
-        let mut layout_cost = layout.cost();
-        for _ in 0..100_000 {
-            let new_layout = Layout::new(&images);
-            let new_layout_cost = new_layout.cost();
-
-            if new_layout_cost < layout_cost {
-                layout = new_layout;
-                layout_cost = new_layout_cost;
-            }
-        }
+        let layout = algorithm::generate_layout(&images).unwrap();
         console::time_end_with_label("generating random layout");
 
         console::group_1(&"Layout debug".into());
