@@ -31,7 +31,7 @@ pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
         .into_iter()
         .enumerate()
         .map(|(i, image_array)| {
-            console::group_1(&format!("processing image {}", i + 1).into());
+            console::group_collapsed_1(&format!("processing image {}", i + 1).into());
             console::time();
             let result = array_to_image(&image_array.to_vec());
             console::time_end();
@@ -98,7 +98,7 @@ pub fn render_specific_layout(
         .into_iter()
         .enumerate()
         .map(|(i, image_array)| {
-            console::group_1(&format!("processing image {}", i + 1).into());
+            console::group_collapsed_1(&format!("processing image {}", i + 1).into());
             console::time();
             let result = array_to_image(&image_array.to_vec());
             console::time_end();

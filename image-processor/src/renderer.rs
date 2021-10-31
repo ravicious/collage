@@ -22,6 +22,8 @@ pub fn render_layout(layout: &Layout) -> RgbImage {
     let (width, height) = layout.dimensions();
     let mut result = RgbImage::new(width, height);
 
+    console::group_1(&"Rendering layout".into());
+
     for internal_node in layout.internal_nodes() {
         console::log_1(
             &format!(
@@ -78,6 +80,8 @@ pub fn render_layout(layout: &Layout) -> RgbImage {
             .copy_from(&resized_image, coords.x, coords.y)
             .unwrap();
     }
+
+    console::group_end();
 
     result
 }
