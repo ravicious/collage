@@ -127,7 +127,22 @@ impl<'a> MutationOp<Layout<'a>> for LayoutMutation {
         R: Rng + Sized,
     {
         let mut mutated = genome.clone();
-        mutated.swap_random_node_pair(rng);
+
+        match rng.gen_range(0, 3) {
+            0 => {
+                mutated.swap_random_node_pair(rng);
+            }
+            1 => {
+                mutated.randomize_width(rng);
+            }
+            2 => {
+                mutated.randomize_height(rng);
+            }
+            _ => {
+                unreachable!();
+            }
+        }
+
         mutated
     }
 }

@@ -274,6 +274,25 @@ impl<'a> Layout<'a> {
         *b = random_node_label;
     }
 
+    pub fn randomize_width<R>(&mut self, rng: &mut R)
+    where
+        R: Rng + Sized,
+    {
+        let width = self.canvas_dimensions.width as i64;
+        let new_width = width + rng.gen_range(-width + 1, 2 * self.canvas_dimensions.height as i64);
+        self.canvas_dimensions.width = new_width as u32;
+    }
+
+    pub fn randomize_height<R>(&mut self, rng: &mut R)
+    where
+        R: Rng + Sized,
+    {
+        let height = self.canvas_dimensions.height as i64;
+        let new_height =
+            height + rng.gen_range(-height + 1, 2 * self.canvas_dimensions.width as i64);
+        self.canvas_dimensions.height = new_height as u32;
+    }
+
     fn calculate_random_canvas_dimensions(images: &'a [RgbImage]) -> Dimensions {
         let mut rng = rand::thread_rng();
         let len_for_width = rng.gen_range(1, images.len() + 1);
