@@ -10,16 +10,17 @@ struct Point {
 }
 
 pub fn render_layout(layout: &Layout) -> RgbImage {
-    // For each leaf node:
+    // Canvas dimensions stored on the layout are just a side effect of how the original algorithm
+    // is described in the paper. The paper assumes that the canvas size is always known upfront.
+    // But in our case we want to be as big as possible without scaling the images up or down too
+    // much.
     //
-    // 1. collect each parent up to the root node and save its node label and calculated size
-    // 2. traverse that path from the root node, calculating the position based on the size
-    // 3. render the image on the canvas
-
-    let mut result = RgbImage::new(
-        layout.canvas_dimensions.width,
-        layout.canvas_dimensions.height,
-    );
+    // So the canvas dimensions are more like just auxiliary values that are meant to help us get to
+    // the optimal layout. It's rare that the generated dimensions are 100% equal to canvas
+    // dimensions. So instead of including bars of black pixels, the final image can just have the
+    // actual generated dimensions.
+    let (width, height) = layout.dimensions();
+    let mut result = RgbImage::new(width, height);
 
     for internal_node in layout.internal_nodes() {
         console::log_1(
@@ -34,6 +35,11 @@ pub fn render_layout(layout: &Layout) -> RgbImage {
         );
     }
 
+    // For each leaf node:
+    //
+    // 1. collect each parent up to the root node and save its node label and calculated size
+    // 2. traverse that path from the root node, calculating the position based on the size
+    // 3. render the image on the canvas
     for leaf_node in layout.leaf_nodes() {
         let mut coords = Point { x: 0, y: 0 };
         for (parent, child) in leaf_node.lineage().iter().tuple_windows() {

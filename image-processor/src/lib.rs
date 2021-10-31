@@ -51,7 +51,13 @@ pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
         console::group_collapsed_1(&"Dot".into());
         console::log_1(&format!("{:?}", layout.dot()).into());
         console::group_end();
-        console::log_1(&format!("Canvas dimensions: {:?}", layout.canvas_dimensions).into());
+        console::log_1(
+            &format!(
+                "Canvas dimensions: {:?}",
+                layout.canvas_dimensions.to_tuple()
+            )
+            .into(),
+        );
         console::log_1(&format!("Dimensions: {:?}", layout.dimensions()).into());
         console::log_1(&format!("Cost: {}", layout.cost()).into());
         console::log_1(&format!("Old cost: {}", layout.old_cost()).into());
@@ -106,7 +112,13 @@ pub fn render_specific_layout(
     console::group_collapsed_1(&"Dot".into());
     console::log_1(&format!("{:?}", layout.dot()).into());
     console::group_end();
-    console::log_1(&format!("Canvas dimensions: {:?}", layout.canvas_dimensions).into());
+    console::log_1(
+        &format!(
+            "Canvas dimensions: {:?}",
+            layout.canvas_dimensions.to_tuple()
+        )
+        .into(),
+    );
     console::log_1(&format!("Dimensions: {:?}", layout.dimensions()).into());
     console::log_1(&format!("Cost: {}", layout.cost()).into());
     console::log_1(&format!("Old cost: {}", layout.old_cost()).into());
