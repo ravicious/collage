@@ -252,9 +252,7 @@ impl<'a> Layout<'a> {
             .unwrap()
     }
 
-    fn indexes_of_nodes_with_less_than_two_children(
-        &self,
-    ) -> impl Iterator<Item = NodeIndex> + '_ {
+    fn indexes_of_nodes_with_less_than_two_children(&self) -> impl Iterator<Item = NodeIndex> + '_ {
         self.graph
             .node_indices()
             .filter(move |idx| self.graph.edges(*idx).count() < 2)
