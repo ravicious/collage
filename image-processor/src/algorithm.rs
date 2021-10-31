@@ -122,12 +122,13 @@ impl GeneticOperator for LayoutMutation {
 }
 
 impl<'a> MutationOp<Layout<'a>> for LayoutMutation {
-    fn mutate<R>(&self, genome: Layout<'a>, _: &mut R) -> Layout<'a>
+    fn mutate<R>(&self, genome: Layout<'a>, rng: &mut R) -> Layout<'a>
     where
         R: Rng + Sized,
     {
-        // TODO: Implement actual mutation.
-        genome.clone()
+        let mut mutated = genome.clone();
+        mutated.swap_random_node_pair(rng);
+        mutated
     }
 }
 
