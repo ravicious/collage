@@ -21,7 +21,7 @@ pub struct LayoutBlueprint {
     height: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Layout<'a> {
     graph: LayoutGraph<'a>,
     pub canvas_dimensions: Dimensions,
@@ -29,14 +29,14 @@ pub struct Layout<'a> {
 
 pub type LayoutGraph<'a> = Graph<NodeLabel<'a>, ()>;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum NodeLabel<'a> {
     Internal(SliceDirection),
     Leaf(&'a RgbImage),
 }
 use NodeLabel::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SliceDirection {
     Vertical,
     Horizontal,
@@ -202,15 +202,28 @@ impl<'a> Layout<'a> {
     // Smaller value is better.
     pub fn cost(&self) -> f64 {
         let number_of_images = self.leaf_nodes().count() as f64;
-        let coverage_of_canvas_area = 1.0
-            - self
-                .leaf_nodes()
-                .map(|leaf_node| {
-                    leaf_node.dimensions().size() as f64 / self.canvas_dimensions.size() as f64
-                })
-                .sum::<f64>();
-        let scale_factor = self
+
+        number_of_images * self.scale_factor() + self.coverage_of_canvas_area()
+    }
+
+    // Previous implementation of the cost function, useful for comparing new results to old ones.
+    pub fn old_cost(&self) -> f64 {
+        let number_of_images = self.leaf_nodes().count() as f64;
+
+        self.scale_factor() + number_of_images * self.coverage_of_canvas_area()
+    }
+
+    fn coverage_of_canvas_area(&self) -> f64 {
+        1.0 - self
             .leaf_nodes()
+            .map(|leaf_node| {
+                leaf_node.dimensions().size() as f64 / self.canvas_dimensions.size() as f64
+            })
+            .sum::<f64>()
+    }
+
+    fn scale_factor(&self) -> f64 {
+        self.leaf_nodes()
             .map(|leaf_node| {
                 let original_image_size =
                     Dimensions::from_tuple(leaf_node.image().unwrap().dimensions()).size() as f64;
@@ -218,15 +231,83 @@ impl<'a> Layout<'a> {
 
                 (scaled_image_size - original_image_size).abs() / original_image_size
             })
-            .sum::<f64>();
+            .sum::<f64>()
+    }
 
-        scale_factor + number_of_images * coverage_of_canvas_area
+    pub fn swap_random_node_pair<R>(&mut self, rng: &mut R)
+    where
+        R: Rng + Sized,
+    {
+        let random_node_index = self.graph.node_indices().choose(rng).unwrap();
+        self.swap_with_random_node(rng, random_node_index);
+    }
+
+    fn swap_with_random_node<R>(&mut self, rng: &mut R, random_node_index: NodeIndex)
+    where
+        R: Rng + Sized,
+    {
+        let random_node_label = self.graph[random_node_index];
+
+        let other_node_index = match random_node_label {
+            NodeLabel::Internal(_) => {
+                match self
+                    .internal_nodes()
+                    .filter(|node| *node.node_label() != random_node_label)
+                    .choose(rng)
+                {
+                    Some(node) => node.index,
+                    None => {
+                        // This can happen if all internal nodes have the same node label or there's just a
+                        // single internal node.
+                        //
+                        // In this situation we fall back to swapping leaf nodes, as we don't want
+                        // to have a mutation that does nothing.
+                        let random_leaf_node_index = self.leaf_nodes().choose(rng).unwrap().index;
+                        self.swap_with_random_node(rng, random_leaf_node_index);
+                        return;
+                    }
+                }
+            }
+            NodeLabel::Leaf(_) => {
+                self.leaf_nodes()
+                    .filter(|node| node.index != random_node_index)
+                    .choose(rng)
+                    .unwrap()
+                    .index
+            }
+        };
+        let other_node_label = self.graph[other_node_index];
+
+        let (a, b) = self
+            .graph
+            .index_twice_mut(random_node_index, other_node_index);
+        *a = other_node_label;
+        *b = random_node_label;
+    }
+
+    pub fn randomize_width<R>(&mut self, rng: &mut R)
+    where
+        R: Rng + Sized,
+    {
+        let width = self.canvas_dimensions.width as i64;
+        let new_width = width + rng.gen_range(-width + 1, 2 * self.canvas_dimensions.height as i64);
+        self.canvas_dimensions.width = new_width as u32;
+    }
+
+    pub fn randomize_height<R>(&mut self, rng: &mut R)
+    where
+        R: Rng + Sized,
+    {
+        let height = self.canvas_dimensions.height as i64;
+        let new_height =
+            height + rng.gen_range(-height + 1, 2 * self.canvas_dimensions.width as i64);
+        self.canvas_dimensions.height = new_height as u32;
     }
 
     fn calculate_random_canvas_dimensions(images: &'a [RgbImage]) -> Dimensions {
         let mut rng = rand::thread_rng();
-        let len_for_width = rng.gen_range(1..=images.len());
-        let len_for_height = rng.gen_range(1..=images.len());
+        let len_for_width = rng.gen_range(1, images.len() + 1);
+        let len_for_height = rng.gen_range(1, images.len() + 1);
         let width = images
             .choose_multiple(&mut rng, len_for_width)
             .map(|i| i.width())
@@ -235,12 +316,6 @@ impl<'a> Layout<'a> {
             .choose_multiple(&mut rng, len_for_height)
             .map(|i| i.height())
             .sum();
-
-        // To sum dimensions from the same set of images (might produce better results):
-        //   let len = rng.gen_range(1..=images.len());
-        //   let random_images: Vec<&RgbImage> = images.choose_multiple(&mut rng, len).collect();
-        //   let width = random_images.iter().map(|i| i.width()).sum();
-        //   let height = random_images.iter().map(|i| i.height()).sum();
 
         Dimensions { width, height }
     }
@@ -272,6 +347,13 @@ impl<'a> Layout<'a> {
         let index = self.graph.externals(Direction::Incoming).next().unwrap();
 
         LayoutNode::new(self, index)
+    }
+
+    pub fn internal_nodes(&self) -> impl Iterator<Item = LayoutNode> + '_ {
+        self.graph
+            .node_indices()
+            .filter(|idx| self.graph.edges(*idx).count() == 2)
+            .map(|idx| self.at_index(idx))
     }
 
     pub fn leaf_nodes(&self) -> impl Iterator<Item = LayoutNode> + '_ {
@@ -372,8 +454,9 @@ where
     a_ns.eq(b_ns) && a_es.eq(b_es)
 }
 
+#[derive(Clone, Copy)]
 pub struct LayoutNode<'a> {
-    index: NodeIndex,
+    pub index: NodeIndex,
     layout: &'a Layout<'a>,
 }
 
@@ -686,5 +769,99 @@ mod tests {
             .update_edge(h_index, image_2_index, ());
 
         assert_eq!(Ok(expected_layout), layout_from_blueprint);
+    }
+
+    // Since we only have two internal nodes, we know that if pass one of them to
+    // `swap_with_random_node`, the other one will be the only other internal node. Thus we can
+    // write a test case.
+    #[test]
+    fn swap_random_pair_of_internal_nodes() {
+        let blueprint = LayoutBlueprint {
+            graph_representation: vec![(String::from("V"), vec![1]), (String::from("H"), vec![])],
+            width: 10,
+            height: 10,
+        };
+        let images = vec![
+            RgbImage::new(5, 10),
+            RgbImage::new(2, 2),
+            RgbImage::new(2, 4),
+        ];
+        let mut layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        layout.swap_with_random_node(&mut rand::thread_rng(), NodeIndex::new(0));
+
+        assert_eq!(
+            Internal(Horizontal),
+            *layout.at_index(NodeIndex::new(0)).node_label()
+        );
+        assert_eq!(
+            Internal(Vertical),
+            *layout.at_index(NodeIndex::new(1)).node_label()
+        );
+    }
+
+    // Since we only have two leaf nodes, we know that if pass one of them to
+    // `swap_with_random_node`, the other one will be the only other leaf node. Thus we can write a
+    // test case.
+    #[test]
+    fn swap_random_pair_of_leaf_nodes() {
+        let blueprint = LayoutBlueprint {
+            graph_representation: vec![(String::from("V"), vec![])],
+            width: 10,
+            height: 10,
+        };
+        let images = vec![RgbImage::new(1, 1), RgbImage::new(2, 2)];
+        let mut layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        layout.swap_with_random_node(&mut rand::thread_rng(), NodeIndex::new(1));
+
+        assert_eq!(Some(&images[1]), layout.at_index(NodeIndex::new(1)).image());
+        assert_eq!(Some(&images[0]), layout.at_index(NodeIndex::new(2)).image());
+    }
+
+    #[test]
+    fn fall_back_to_swapping_leaf_nodes_if_all_internal_nodes_have_the_same_label() {
+        let blueprint = LayoutBlueprint {
+            graph_representation: vec![(String::from("V"), vec![1]), (String::from("V"), vec![])],
+            width: 10,
+            height: 10,
+        };
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+        ];
+        let mut layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        layout.swap_with_random_node(&mut rand::thread_rng(), NodeIndex::new(0));
+
+        let actual_leaf_node_images: Vec<RgbImage> = layout
+            .leaf_nodes()
+            .map(|node| node.image().unwrap())
+            .cloned()
+            .collect();
+
+        assert_ne!(images, actual_leaf_node_images);
+    }
+
+    #[test]
+    fn fall_back_to_swapping_leaf_nodes_if_theres_one_internal_node() {
+        let blueprint = LayoutBlueprint {
+            graph_representation: vec![(String::from("V"), vec![])],
+            width: 10,
+            height: 10,
+        };
+        let images = vec![RgbImage::new(1, 1), RgbImage::new(2, 2)];
+        let mut layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        layout.swap_with_random_node(&mut rand::thread_rng(), NodeIndex::new(0));
+
+        let expected_leaf_node_images = vec![&images[1], &images[0]];
+        let actual_leaf_node_images: Vec<&RgbImage> = layout
+            .leaf_nodes()
+            .map(|node| node.image().unwrap())
+            .collect();
+
+        assert_eq!(expected_leaf_node_images, actual_leaf_node_images);
     }
 }

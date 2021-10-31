@@ -1,5 +1,7 @@
 #![feature(try_blocks)]
+#![feature(total_cmp)]
 
+mod algorithm;
 mod image_for_processing;
 pub mod layout;
 mod orientation;
@@ -42,26 +44,23 @@ pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
 
     if images.len() > 2 {
         console::time_with_label("generating random layout");
-        let mut layout = Layout::new(&images);
-        let mut layout_cost = layout.cost();
-        for _ in 0..100_000 {
-            let new_layout = Layout::new(&images);
-            let new_layout_cost = new_layout.cost();
-
-            if new_layout_cost < layout_cost {
-                layout = new_layout;
-                layout_cost = new_layout_cost;
-            }
-        }
+        let layout = algorithm::generate_layout(&images).unwrap();
         console::time_end_with_label("generating random layout");
 
         console::group_1(&"Layout debug".into());
         console::group_collapsed_1(&"Dot".into());
         console::log_1(&format!("{:?}", layout.dot()).into());
         console::group_end();
-        console::log_1(&format!("Canvas dimensions: {:?}", layout.canvas_dimensions).into());
+        console::log_1(
+            &format!(
+                "Canvas dimensions: {:?}",
+                layout.canvas_dimensions.to_tuple()
+            )
+            .into(),
+        );
         console::log_1(&format!("Dimensions: {:?}", layout.dimensions()).into());
         console::log_1(&format!("Cost: {}", layout.cost()).into());
+        console::log_1(&format!("Old cost: {}", layout.old_cost()).into());
         console::group_end();
 
         console::time_with_label("rendering layout");
@@ -113,9 +112,16 @@ pub fn render_specific_layout(
     console::group_collapsed_1(&"Dot".into());
     console::log_1(&format!("{:?}", layout.dot()).into());
     console::group_end();
-    console::log_1(&format!("Canvas dimensions: {:?}", layout.canvas_dimensions).into());
+    console::log_1(
+        &format!(
+            "Canvas dimensions: {:?}",
+            layout.canvas_dimensions.to_tuple()
+        )
+        .into(),
+    );
     console::log_1(&format!("Dimensions: {:?}", layout.dimensions()).into());
     console::log_1(&format!("Cost: {}", layout.cost()).into());
+    console::log_1(&format!("Old cost: {}", layout.old_cost()).into());
     console::group_end();
 
     console::time_with_label("rendering layout");
