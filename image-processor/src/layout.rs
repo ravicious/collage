@@ -70,8 +70,13 @@ impl std::fmt::Debug for NodeLabel<'_> {
 
 impl<'a> Layout<'a> {
     pub fn new(images: &'a [RgbImage]) -> Self {
-        // TODO: Add estimated capacity with .with_capacity instead of .new
-        let graph = LayoutGraph::new();
+        // According to the property of full binary trees, a full binary tree with N leaf nodes
+        // must have (N - 1) internal nodes, hence (N * 2 - 1) nodes total.
+        //
+        // Each internal node has exactly two edges.
+        let nodes_count = images.len() * 2 - 1;
+        let edges_count = (images.len() - 1) * 2;
+        let graph = LayoutGraph::with_capacity(nodes_count, edges_count);
         let canvas_dimensions = Self::calculate_random_canvas_dimensions(images);
         let mut layout = Layout {
             graph,
