@@ -54,6 +54,7 @@ pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
         console::log_1(&format!("Canvas dimensions: {:?}", layout.canvas_dimensions).into());
         console::log_1(&format!("Dimensions: {:?}", layout.dimensions()).into());
         console::log_1(&format!("Cost: {}", layout.cost()).into());
+        console::log_1(&format!("Old cost: {}", layout.old_cost()).into());
         console::group_end();
 
         console::time_with_label("rendering layout");
@@ -108,6 +109,7 @@ pub fn render_specific_layout(
     console::log_1(&format!("Canvas dimensions: {:?}", layout.canvas_dimensions).into());
     console::log_1(&format!("Dimensions: {:?}", layout.dimensions()).into());
     console::log_1(&format!("Cost: {}", layout.cost()).into());
+    console::log_1(&format!("Old cost: {}", layout.old_cost()).into());
     console::group_end();
 
     console::time_with_label("rendering layout");

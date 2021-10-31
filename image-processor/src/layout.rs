@@ -202,15 +202,28 @@ impl<'a> Layout<'a> {
     // Smaller value is better.
     pub fn cost(&self) -> f64 {
         let number_of_images = self.leaf_nodes().count() as f64;
-        let coverage_of_canvas_area = 1.0
-            - self
-                .leaf_nodes()
-                .map(|leaf_node| {
-                    leaf_node.dimensions().size() as f64 / self.canvas_dimensions.size() as f64
-                })
-                .sum::<f64>();
-        let scale_factor = self
+
+        number_of_images * self.scale_factor() + self.coverage_of_canvas_area()
+    }
+
+    // Previous implementation of the cost function, useful for comparing new results to old ones.
+    pub fn old_cost(&self) -> f64 {
+        let number_of_images = self.leaf_nodes().count() as f64;
+
+        self.scale_factor() + number_of_images * self.coverage_of_canvas_area()
+    }
+
+    fn coverage_of_canvas_area(&self) -> f64 {
+        1.0 - self
             .leaf_nodes()
+            .map(|leaf_node| {
+                leaf_node.dimensions().size() as f64 / self.canvas_dimensions.size() as f64
+            })
+            .sum::<f64>()
+    }
+
+    fn scale_factor(&self) -> f64 {
+        self.leaf_nodes()
             .map(|leaf_node| {
                 let original_image_size =
                     Dimensions::from_tuple(leaf_node.image().unwrap().dimensions()).size() as f64;
@@ -218,9 +231,7 @@ impl<'a> Layout<'a> {
 
                 (scaled_image_size - original_image_size).abs() / original_image_size
             })
-            .sum::<f64>();
-
-        scale_factor + number_of_images * coverage_of_canvas_area
+            .sum::<f64>()
     }
 
     pub fn swap_random_node_pair<R>(&mut self, rng: &mut R)
