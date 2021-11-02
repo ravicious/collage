@@ -309,6 +309,15 @@ impl<'a> Layout<'a> {
         self.canvas_dimensions.height = new_height as u32;
     }
 
+    pub fn randomize_dimensions_by_equal_factor<R>(&mut self, rng: &mut R)
+    where
+        R: Rng + Sized,
+    {
+        let factor = rng.gen_range(0.5, 1.5);
+        self.canvas_dimensions.height = (self.canvas_dimensions.height as f64 * factor) as u32;
+        self.canvas_dimensions.width = (self.canvas_dimensions.width as f64 * factor) as u32;
+    }
+
     fn calculate_random_canvas_dimensions(images: &'a [RgbImage]) -> Dimensions {
         let mut rng = rand::thread_rng();
         let len_for_width = rng.gen_range(1, images.len() + 1);
