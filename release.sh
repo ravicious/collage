@@ -14,3 +14,5 @@ yarn compile-all
 
 git commit -am "Publish updated version"
 git push
+
+git checkout main

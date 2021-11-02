@@ -70,8 +70,13 @@ impl std::fmt::Debug for NodeLabel<'_> {
 
 impl<'a> Layout<'a> {
     pub fn new(images: &'a [RgbImage]) -> Self {
-        // TODO: Add estimated capacity with .with_capacity instead of .new
-        let graph = LayoutGraph::new();
+        // According to the property of full binary trees, a full binary tree with N leaf nodes
+        // must have (N - 1) internal nodes, hence (N * 2 - 1) nodes total.
+        //
+        // Each internal node has exactly two edges.
+        let nodes_count = images.len() * 2 - 1;
+        let edges_count = (images.len() - 1) * 2;
+        let graph = LayoutGraph::with_capacity(nodes_count, edges_count);
         let canvas_dimensions = Self::calculate_random_canvas_dimensions(images);
         let mut layout = Layout {
             graph,
@@ -174,8 +179,8 @@ impl<'a> Layout<'a> {
             }
         }
 
-        // Add images as leafs to nodes with less than two children, starting from the first added node
-        // to the last one.
+        // Add images as leafs to nodes with less than two children, starting from the first added
+        // node to the last one.
         let indexes_of_nodes_with_less_than_two_children: Vec<NodeIndex> = layout
             .indexes_of_nodes_with_less_than_two_children()
             .collect();
@@ -257,8 +262,8 @@ impl<'a> Layout<'a> {
                 {
                     Some(node) => node.index,
                     None => {
-                        // This can happen if all internal nodes have the same node label or there's just a
-                        // single internal node.
+                        // This can happen if all internal nodes have the same node label or
+                        // there's just a single internal node.
                         //
                         // In this situation we fall back to swapping leaf nodes, as we don't want
                         // to have a mutation that does nothing.
@@ -377,8 +382,8 @@ impl<'a> Layout<'a> {
         //
         // https://docs.rs/petgraph/0.6.0/petgraph/graph/struct.Graph.html#method.neighbors_directed
         //
-        // When thinking about binary trees, we typically think that the child that was added first is
-        // on the left, so we have to position the children accordingly here.
+        // When thinking about binary trees, we typically think that the child that was added first
+        // is on the left, so we have to position the children accordingly here.
         try {
             let right = iterator.next().map(|index| self.at_index(index))?;
             let left = iterator.next().map(|index| self.at_index(index))?;
