@@ -10,7 +10,7 @@ fn main() {
         images.push(RgbImage::new(i * 100 + 100, 1000));
     }
 
-    let layout = Layout::new(&images);
+    let layout = Layout::new(&images, &mut rand::thread_rng());
 
     println!("{:?}", layout.dot());
     println!("Canvas dimensions: {:?}", layout.canvas_dimensions);

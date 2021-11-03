@@ -150,7 +150,10 @@ impl<'a> MutationOp<Layout<'a>> for LayoutMutation {
     }
 }
 
-pub fn generate_layout(images: &[RgbImage]) -> Result<Layout, String> {
+pub fn generate_layout<'a, R>(images: &'a [RgbImage], rng: &mut R) -> Result<Layout<'a>, String>
+where
+    R: Rng + Sized,
+{
     // 49 is the max population size. For values bigger than that, genevo starts parallelizing the
     // work by using rayon, which doesn't work OOTB for the Wasm target.
     let population_size = 49;
@@ -160,8 +163,11 @@ pub fn generate_layout(images: &[RgbImage]) -> Result<Layout, String> {
     let reinsertion_ratio = 0.7;
     // End of genevo params.
 
-    let initial_population =
-        Population::with_individuals((0..population_size).map(|_| Layout::new(images)).collect());
+    let initial_population = Population::with_individuals(
+        (0..population_size)
+            .map(|_| Layout::new(images, rng))
+            .collect(),
+    );
 
     let mut layout_sim = simulate(
         genetic_algorithm()

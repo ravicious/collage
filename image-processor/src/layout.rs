@@ -69,7 +69,10 @@ impl std::fmt::Debug for NodeLabel<'_> {
 }
 
 impl<'a> Layout<'a> {
-    pub fn new(images: &'a [RgbImage]) -> Self {
+    pub fn new<R>(images: &'a [RgbImage], rng: &mut R) -> Self
+    where
+        R: Rng + Sized,
+    {
         // According to the property of full binary trees, a full binary tree with N leaf nodes
         // must have (N - 1) internal nodes, hence (N * 2 - 1) nodes total.
         //
@@ -77,21 +80,22 @@ impl<'a> Layout<'a> {
         let nodes_count = images.len() * 2 - 1;
         let edges_count = (images.len() - 1) * 2;
         let graph = LayoutGraph::with_capacity(nodes_count, edges_count);
-        let canvas_dimensions = Self::calculate_random_canvas_dimensions(images);
+        let canvas_dimensions = Self::calculate_random_canvas_dimensions(images, rng);
         let mut layout = Layout {
             graph,
             canvas_dimensions,
         };
-        let mut rng = rand::thread_rng();
-        let mut random_images = images.choose_multiple(&mut rng, images.len());
+        let mut random_images = images.choose_multiple(rng, images.len());
 
         layout.graph.add_node(NodeLabel::Internal(rand::random()));
 
-        // Total number of internal nodes must be equal to <number of images> - 1 and we already
-        // added one internal node.
-        for _ in 0..images.len() - 2 {
-            let random_index = layout.random_index_of_node_with_less_than_two_children();
-            layout.add_node(random_index, NodeLabel::Internal(rand::random()));
+        if images.len() > 2 {
+            // Total number of internal nodes must be equal to <number of images> - 1 and we
+            // already added one internal node.
+            for _ in 0..images.len() - 2 {
+                let random_index = layout.random_index_of_node_with_less_than_two_children(rng);
+                layout.add_node(random_index, NodeLabel::Internal(rand::random()));
+            }
         }
 
         let indexes_of_nodes_with_less_than_two_children: Vec<NodeIndex> = layout
@@ -318,26 +322,30 @@ impl<'a> Layout<'a> {
         self.canvas_dimensions.width = (self.canvas_dimensions.width as f64 * factor) as u32;
     }
 
-    fn calculate_random_canvas_dimensions(images: &'a [RgbImage]) -> Dimensions {
-        let mut rng = rand::thread_rng();
+    fn calculate_random_canvas_dimensions<R>(images: &'a [RgbImage], rng: &mut R) -> Dimensions
+    where
+        R: Rng + Sized,
+    {
         let len_for_width = rng.gen_range(1, images.len() + 1);
         let len_for_height = rng.gen_range(1, images.len() + 1);
         let width = images
-            .choose_multiple(&mut rng, len_for_width)
+            .choose_multiple(rng, len_for_width)
             .map(|i| i.width())
             .sum();
         let height = images
-            .choose_multiple(&mut rng, len_for_height)
+            .choose_multiple(rng, len_for_height)
             .map(|i| i.height())
             .sum();
 
         Dimensions { width, height }
     }
 
-    fn random_index_of_node_with_less_than_two_children(&self) -> NodeIndex {
-        let mut rng = rand::thread_rng();
+    fn random_index_of_node_with_less_than_two_children<R>(&self, rng: &mut R) -> NodeIndex
+    where
+        R: Rng + Sized,
+    {
         self.indexes_of_nodes_with_less_than_two_children()
-            .choose(&mut rng)
+            .choose(rng)
             .unwrap()
     }
 
