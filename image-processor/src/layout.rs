@@ -2,6 +2,7 @@ use image::RgbImage;
 use petgraph::{
     dot::{Config, Dot},
     graph::NodeIndex,
+    visit::Bfs,
     Direction, Graph,
 };
 use rand::{
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::ptr;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct LayoutBlueprint {
     graph_representation: Vec<(String, Vec<usize>)>,
     width: u32,
@@ -73,6 +74,11 @@ impl<'a> Layout<'a> {
     where
         R: Rng + Sized,
     {
+        if images.len() < 2 {
+            // The internal graph representation is a full binary tree, so it can't have less than
+            // two images.
+            panic!("Attempted to create a layout with less than two images");
+        }
         // According to the property of full binary trees, a full binary tree with N leaf nodes
         // must have (N - 1) internal nodes, hence (N * 2 - 1) nodes total.
         //
@@ -198,6 +204,57 @@ impl<'a> Layout<'a> {
         }
 
         Ok(layout)
+    }
+
+    pub fn to_blueprint(&self) -> LayoutBlueprint {
+        let mut blueprint_with_node_indices = vec![];
+
+        let mut bfs = Bfs::new(&self.graph, self.root_node().index);
+
+        while let Some(index) = bfs.next(&self.graph) {
+            if let Internal(_) = self.graph[index] {
+                let children = self.at_index(index).children().unwrap();
+
+                blueprint_with_node_indices.push((index, vec![children.0.index, children.1.index]));
+            }
+        }
+
+        let mut blueprint = Vec::with_capacity(blueprint_with_node_indices.len());
+
+        for (index, children_indices) in &blueprint_with_node_indices {
+            let label = match self.graph[*index] {
+                Internal(Vertical) => "V".to_string(),
+                Internal(Horizontal) => "H".to_string(),
+                _ => {
+                    unreachable!();
+                }
+            };
+            let children = children_indices
+                .iter()
+                .filter_map(|child_index| {
+                    if let Internal(_) = self.graph[*child_index] {
+                        Some(
+                            blueprint_with_node_indices
+                                .iter()
+                                .position(|(i, _)| i == child_index)
+                                .unwrap_or_else(|| {
+                                    panic!("{:?} not found in blueprint", child_index)
+                                }),
+                        )
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            blueprint.push((label, children));
+        }
+
+        LayoutBlueprint {
+            graph_representation: blueprint,
+            width: self.canvas_dimensions.width,
+            height: self.canvas_dimensions.height,
+        }
     }
 
     pub fn aspect_ratio(&self) -> f64 {
@@ -631,6 +688,8 @@ pub enum ChildSide {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand_core::SeedableRng;
+    use rand_pcg::Pcg64;
 
     #[test]
     fn comparing_layouts_with_equal_dimensions() {
@@ -885,5 +944,63 @@ mod tests {
             .collect();
 
         assert_eq!(expected_leaf_node_images, actual_leaf_node_images);
+    }
+
+    #[test]
+    fn create_blueprint_from_layout() {
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+        ];
+        let mut layout = Layout {
+            graph: LayoutGraph::new(),
+            canvas_dimensions: Dimensions::from_tuple((10, 10)),
+        };
+        let v_index = layout.graph.add_node(Internal(Vertical));
+        let h_index = layout.graph.add_node(Internal(Horizontal));
+        let image_0_index = layout.graph.add_node(Leaf(&images[0]));
+        let image_1_index = layout.graph.add_node(Leaf(&images[1]));
+        let image_2_index = layout.graph.add_node(Leaf(&images[2]));
+
+        layout.graph.update_edge(v_index, h_index, ());
+        layout.graph.update_edge(v_index, image_0_index, ());
+        layout.graph.update_edge(h_index, image_1_index, ());
+        layout.graph.update_edge(h_index, image_2_index, ());
+
+        let expected_blueprint = LayoutBlueprint {
+            graph_representation: vec![(String::from("V"), vec![1]), (String::from("H"), vec![])],
+            width: 10,
+            height: 10,
+        };
+        let actual_blueprint = layout.to_blueprint();
+
+        assert_eq!(expected_blueprint, actual_blueprint);
+    }
+
+    #[test]
+    fn from_and_to_blueprint_returns_same_blueprint() {
+        let seed = rand::thread_rng().gen();
+        // let seed = 7519943073446034360;
+        let mut rng = Pcg64::seed_from_u64(seed);
+        for _ in 0..100 {
+            let mut images = vec![];
+            for i in 0..rng.gen_range(2, 10) {
+                images.push(RgbImage::new(1, i + 1));
+            }
+            let layout = Layout::new(&images, &mut rng);
+            let blueprint1 = layout.to_blueprint();
+            let blueprint2 = Layout::from_blueprint(&blueprint1, &images)
+                .unwrap()
+                .to_blueprint();
+
+            assert_eq!(
+                blueprint1,
+                blueprint2,
+                "Blueprints are not matching each other\nSeed: {}\nLayout:\n{:?}",
+                seed,
+                layout.dot(),
+            );
+        }
     }
 }
