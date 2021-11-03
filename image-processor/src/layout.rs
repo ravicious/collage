@@ -691,6 +691,23 @@ mod tests {
     use rand_core::SeedableRng;
     use rand_pcg::Pcg64;
 
+    // Auxiliary function for creating blueprints in tests.
+    fn create_blueprint_from_slice(
+        dimensions: (u32, u32),
+        graph_representation: &[(&str, &[usize])],
+    ) -> LayoutBlueprint {
+        let graph_representation: Vec<(String, Vec<usize>)> = graph_representation
+            .iter()
+            .map(|(label, indices)| (label.to_string(), indices.to_vec()))
+            .collect();
+
+        LayoutBlueprint {
+            width: dimensions.0,
+            height: dimensions.1,
+            graph_representation,
+        }
+    }
+
     #[test]
     fn comparing_layouts_with_equal_dimensions() {
         let layout_1 = Layout {
@@ -813,11 +830,7 @@ mod tests {
         //     1 -> 3 [ ]
         //     1 -> 4 [ ]
         // }
-        let blueprint = LayoutBlueprint {
-            graph_representation: vec![(String::from("V"), vec![1]), (String::from("H"), vec![])],
-            width: 10,
-            height: 10,
-        };
+        let blueprint = create_blueprint_from_slice((10, 10), &[("V", &[1]), ("H", &[])]);
         let images = vec![
             RgbImage::new(5, 10),
             RgbImage::new(2, 2),
@@ -857,11 +870,7 @@ mod tests {
     // write a test case.
     #[test]
     fn swap_random_pair_of_internal_nodes() {
-        let blueprint = LayoutBlueprint {
-            graph_representation: vec![(String::from("V"), vec![1]), (String::from("H"), vec![])],
-            width: 10,
-            height: 10,
-        };
+        let blueprint = create_blueprint_from_slice((10, 10), &[("V", &[1]), ("H", &[])]);
         let images = vec![
             RgbImage::new(5, 10),
             RgbImage::new(2, 2),
@@ -886,11 +895,7 @@ mod tests {
     // test case.
     #[test]
     fn swap_random_pair_of_leaf_nodes() {
-        let blueprint = LayoutBlueprint {
-            graph_representation: vec![(String::from("V"), vec![])],
-            width: 10,
-            height: 10,
-        };
+        let blueprint = create_blueprint_from_slice((10, 10), &[("V", &[])]);
         let images = vec![RgbImage::new(1, 1), RgbImage::new(2, 2)];
         let mut layout = Layout::from_blueprint(&blueprint, &images).unwrap();
 
@@ -902,11 +907,7 @@ mod tests {
 
     #[test]
     fn fall_back_to_swapping_leaf_nodes_if_all_internal_nodes_have_the_same_label() {
-        let blueprint = LayoutBlueprint {
-            graph_representation: vec![(String::from("V"), vec![1]), (String::from("V"), vec![])],
-            width: 10,
-            height: 10,
-        };
+        let blueprint = create_blueprint_from_slice((10, 10), &[("V", &[1]), ("V", &[])]);
         let images = vec![
             RgbImage::new(1, 1),
             RgbImage::new(1, 2),
@@ -927,11 +928,7 @@ mod tests {
 
     #[test]
     fn fall_back_to_swapping_leaf_nodes_if_theres_one_internal_node() {
-        let blueprint = LayoutBlueprint {
-            graph_representation: vec![(String::from("V"), vec![])],
-            width: 10,
-            height: 10,
-        };
+        let blueprint = create_blueprint_from_slice((10, 10), &[("V", &[])]);
         let images = vec![RgbImage::new(1, 1), RgbImage::new(2, 2)];
         let mut layout = Layout::from_blueprint(&blueprint, &images).unwrap();
 
@@ -968,11 +965,7 @@ mod tests {
         layout.graph.update_edge(h_index, image_1_index, ());
         layout.graph.update_edge(h_index, image_2_index, ());
 
-        let expected_blueprint = LayoutBlueprint {
-            graph_representation: vec![(String::from("V"), vec![1]), (String::from("H"), vec![])],
-            width: 10,
-            height: 10,
-        };
+        let expected_blueprint = create_blueprint_from_slice((10, 10), &[("V", &[1]), ("H", &[])]);
         let actual_blueprint = layout.to_blueprint();
 
         assert_eq!(expected_blueprint, actual_blueprint);
