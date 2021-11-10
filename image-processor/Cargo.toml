@@ -14,12 +14,13 @@ default = ["console_error_panic_hook"]
 wasm-bindgen = { version = "0.2.75", features = ["serde-serialize"] }
 js-sys = "0.3.51"
 kamadak-exif = "0.5.4"
-rand = { version = "0.7.3", features = ["wasm-bindgen"] }
+rand = { version = "0.8.4" }
+getrandom = { version = "0.2", features = ["js"] }
 petgraph = "0.6.0"
 itertools = "0.10.1"
 serde = { version = "1.0", features = ["derive"] }
 web-sys = { version = "0.3", features = ["console"] }
-genevo = "0.5.0"
+genevo = "0.7.0"
 chrono = { version = "0.4", features = ["wasmbind"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
@@ -42,8 +43,8 @@ features = ["gif", "jpeg", "png", "webp", "bmp"]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.13"
-rand_pcg = "0.2.1"
-rand_core = "0.5.1"
+rand_pcg = "0.3.1"
+rand_core = "0.6.3"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.
