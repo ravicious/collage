@@ -56,13 +56,7 @@ pub fn render_layout(layout: &Layout) -> RgbImage {
         }
 
         let dimensions = leaf_node.dimensions();
-
-        let resized_image = image::imageops::resize(
-            leaf_node.image().unwrap(),
-            dimensions.width,
-            dimensions.height,
-            image::imageops::FilterType::Lanczos3,
-        );
+        let image = leaf_node.image().unwrap();
 
         console::log_1(
             &format!(
@@ -76,9 +70,19 @@ pub fn render_layout(layout: &Layout) -> RgbImage {
             .into(),
         );
 
-        result
-            .copy_from(&resized_image, coords.x, coords.y)
-            .unwrap();
+        if dimensions.to_tuple() == image.dimensions() {
+            result.copy_from(image, coords.x, coords.y).unwrap();
+        } else {
+            let resized_image = image::imageops::resize(
+                image,
+                dimensions.width,
+                dimensions.height,
+                image::imageops::FilterType::Lanczos3,
+            );
+            result
+                .copy_from(&resized_image, coords.x, coords.y)
+                .unwrap();
+        };
     }
 
     console::group_end();

@@ -44,7 +44,7 @@ pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
 
     if images.len() > 2 {
         console::time_with_label("generating random layout");
-        let layout = algorithm::generate_layout(&images).unwrap();
+        let layout = algorithm::generate_layout(&images, &mut rand::thread_rng()).unwrap();
         console::time_end_with_label("generating random layout");
 
         console::group_1(&"Layout debug".into());

@@ -97,12 +97,20 @@ impl GeneticOperator for LayoutCrossover {
 }
 
 impl<'a> CrossoverOp<Layout<'a>> for LayoutCrossover {
-    fn crossover<R>(&self, parents: Parents<Layout<'a>>, _: &mut R) -> Children<Layout<'a>>
+    fn crossover<R>(&self, parents: Parents<Layout<'a>>, rng: &mut R) -> Children<Layout<'a>>
     where
         R: Rng + Sized,
     {
-        // TODO: Implement actual crossover.
-        parents.clone()
+        if let ([parent_1, parent_2], _) = parents.split_at(2) {
+            let mut child_1 = parent_1.clone();
+            let mut child_2 = parent_2.clone();
+
+            child_1.crossover_random_subtrees(&mut child_2, rng);
+
+            vec![child_1, child_2]
+        } else {
+            unreachable!();
+        }
     }
 }
 
@@ -128,7 +136,7 @@ impl<'a> MutationOp<Layout<'a>> for LayoutMutation {
     {
         let mut mutated = genome.clone();
 
-        match rng.gen_range(0, 3) {
+        match rng.gen_range(0, 4) {
             0 => {
                 mutated.swap_random_node_pair(rng);
             }
@@ -137,6 +145,9 @@ impl<'a> MutationOp<Layout<'a>> for LayoutMutation {
             }
             2 => {
                 mutated.randomize_height(rng);
+            }
+            3 => {
+                mutated.randomize_dimensions_by_equal_factor(rng);
             }
             _ => {
                 unreachable!();
@@ -147,7 +158,10 @@ impl<'a> MutationOp<Layout<'a>> for LayoutMutation {
     }
 }
 
-pub fn generate_layout(images: &[RgbImage]) -> Result<Layout, String> {
+pub fn generate_layout<'a, R>(images: &'a [RgbImage], rng: &mut R) -> Result<Layout<'a>, String>
+where
+    R: Rng + Sized,
+{
     // 49 is the max population size. For values bigger than that, genevo starts parallelizing the
     // work by using rayon, which doesn't work OOTB for the Wasm target.
     let population_size = 49;
@@ -157,8 +171,11 @@ pub fn generate_layout(images: &[RgbImage]) -> Result<Layout, String> {
     let reinsertion_ratio = 0.7;
     // End of genevo params.
 
-    let initial_population =
-        Population::with_individuals((0..population_size).map(|_| Layout::new(images)).collect());
+    let initial_population = Population::with_individuals(
+        (0..population_size)
+            .map(|_| Layout::new(images, rng))
+            .collect(),
+    );
 
     let mut layout_sim = simulate(
         genetic_algorithm()
