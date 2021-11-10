@@ -362,7 +362,8 @@ impl<'a> Layout<'a> {
         R: Rng + Sized,
     {
         let width = self.canvas_dimensions.width as i64;
-        let new_width = width + rng.gen_range(-width + 1, 2 * self.canvas_dimensions.height as i64);
+        let new_width =
+            width + rng.gen_range(-width + 1..=(2 * self.canvas_dimensions.height as i64));
         self.canvas_dimensions.width = new_width as u32;
     }
 
@@ -372,7 +373,7 @@ impl<'a> Layout<'a> {
     {
         let height = self.canvas_dimensions.height as i64;
         let new_height =
-            height + rng.gen_range(-height + 1, 2 * self.canvas_dimensions.width as i64);
+            height + rng.gen_range(-height + 1..=(2 * self.canvas_dimensions.width as i64));
         self.canvas_dimensions.height = new_height as u32;
     }
 
@@ -380,7 +381,7 @@ impl<'a> Layout<'a> {
     where
         R: Rng + Sized,
     {
-        let factor = rng.gen_range(0.5, 1.5);
+        let factor = rng.gen_range(0.5..=1.5);
         self.canvas_dimensions.height = (self.canvas_dimensions.height as f64 * factor) as u32;
         self.canvas_dimensions.width = (self.canvas_dimensions.width as f64 * factor) as u32;
     }
@@ -389,8 +390,8 @@ impl<'a> Layout<'a> {
     where
         R: Rng + Sized,
     {
-        let len_for_width = rng.gen_range(1, images.len() + 1);
-        let len_for_height = rng.gen_range(1, images.len() + 1);
+        let len_for_width = rng.gen_range(1..=images.len());
+        let len_for_height = rng.gen_range(1..=images.len());
         let width = images
             .choose_multiple(rng, len_for_width)
             .map(|i| i.width())
@@ -1413,7 +1414,7 @@ mod tests {
         let mut rng = Pcg64::seed_from_u64(seed);
         for _ in 0..100 {
             let mut images = vec![];
-            for i in 0..rng.gen_range(2, 10) {
+            for i in 0..rng.gen_range(2..10) {
                 images.push(RgbImage::new(1, i + 1));
             }
             let layout = Layout::new(&images, &mut rng);

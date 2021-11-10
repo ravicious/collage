@@ -136,7 +136,7 @@ impl<'a> MutationOp<Layout<'a>> for LayoutMutation {
     {
         let mut mutated = genome.clone();
 
-        match rng.gen_range(0, 4) {
+        match rng.gen_range(0..=3) {
             0 => {
                 mutated.swap_random_node_pair(rng);
             }
@@ -162,9 +162,7 @@ pub fn generate_layout<'a, R>(images: &'a [RgbImage], rng: &mut R) -> Result<Lay
 where
     R: Rng + Sized,
 {
-    // 49 is the max population size. For values bigger than that, genevo starts parallelizing the
-    // work by using rayon, which doesn't work OOTB for the Wasm target.
-    let population_size = 49;
+    let population_size = if cfg!(debug_assertions) { 50 } else { 75 };
     let generation_limit = if cfg!(debug_assertions) { 200 } else { 4_000 };
     let selection_ratio = 0.7;
     let num_individuals_per_parents = 2;
@@ -200,5 +198,5 @@ where
         return Ok(step.result.best_solution.solution.genome);
     }
 
-    Err("something went wrong with layout_sim.run()".to_string())
+    Err("Something went wrong with layout_sim.run()".to_string())
 }
