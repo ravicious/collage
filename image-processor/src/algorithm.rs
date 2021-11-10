@@ -97,12 +97,20 @@ impl GeneticOperator for LayoutCrossover {
 }
 
 impl<'a> CrossoverOp<Layout<'a>> for LayoutCrossover {
-    fn crossover<R>(&self, parents: Parents<Layout<'a>>, _: &mut R) -> Children<Layout<'a>>
+    fn crossover<R>(&self, parents: Parents<Layout<'a>>, rng: &mut R) -> Children<Layout<'a>>
     where
         R: Rng + Sized,
     {
-        // TODO: Implement actual crossover.
-        parents.clone()
+        if let ([parent_1, parent_2], _) = parents.split_at(2) {
+            let mut child_1 = parent_1.clone();
+            let mut child_2 = parent_2.clone();
+
+            child_1.crossover_random_subtrees(&mut child_2, rng);
+
+            vec![child_1, child_2]
+        } else {
+            unreachable!();
+        }
     }
 }
 

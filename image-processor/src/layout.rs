@@ -1,4 +1,5 @@
 use image::RgbImage;
+use itertools::Itertools;
 use petgraph::{
     dot::{Config, Dot},
     graph::NodeIndex,
@@ -207,15 +208,24 @@ impl<'a> Layout<'a> {
     }
 
     pub fn to_blueprint(&self) -> LayoutBlueprint {
+        let blueprint = self.subtree_to_blueprint(self.root_node().index);
+
+        LayoutBlueprint {
+            graph_representation: blueprint,
+            width: self.canvas_dimensions.width,
+            height: self.canvas_dimensions.height,
+        }
+    }
+
+    fn subtree_to_blueprint(&self, index: NodeIndex) -> Vec<(String, Vec<usize>)> {
         let mut blueprint_with_node_indices = vec![];
 
-        let mut bfs = Bfs::new(&self.graph, self.root_node().index);
+        for node in self.logical_subtree_bfs_iter(index) {
+            if let Internal(_) = node.node_label() {
+                let children = node.children().unwrap();
 
-        while let Some(index) = bfs.next(&self.graph) {
-            if let Internal(_) = self.graph[index] {
-                let children = self.at_index(index).children().unwrap();
-
-                blueprint_with_node_indices.push((index, vec![children.0.index, children.1.index]));
+                blueprint_with_node_indices
+                    .push((node.index, vec![children.0.index, children.1.index]));
             }
         }
 
@@ -250,11 +260,7 @@ impl<'a> Layout<'a> {
             blueprint.push((label, children));
         }
 
-        LayoutBlueprint {
-            graph_representation: blueprint,
-            width: self.canvas_dimensions.width,
-            height: self.canvas_dimensions.height,
-        }
+        blueprint
     }
 
     pub fn aspect_ratio(&self) -> f64 {
@@ -407,9 +413,11 @@ impl<'a> Layout<'a> {
     }
 
     fn indexes_of_nodes_with_less_than_two_children(&self) -> impl Iterator<Item = NodeIndex> + '_ {
-        self.graph
-            .node_indices()
-            .filter(move |idx| self.graph.edges(*idx).count() < 2)
+        self.graph.node_indices().filter(move |idx| {
+            let is_internal = matches!(self.graph[*idx], Internal(_));
+
+            is_internal && self.graph.edges(*idx).count() < 2
+        })
     }
 
     fn node_has_less_than_two_children(&self, idx: NodeIndex) -> bool {
@@ -428,17 +436,164 @@ impl<'a> Layout<'a> {
         LayoutNode::new(self, index)
     }
 
-    pub fn internal_nodes(&self) -> impl Iterator<Item = LayoutNode> + '_ {
+    pub fn internal_nodes(&self) -> impl Iterator<Item = LayoutNode> + '_ + Clone {
         self.graph
             .node_indices()
             .filter(|idx| self.graph.edges(*idx).count() == 2)
             .map(|idx| self.at_index(idx))
     }
 
-    pub fn leaf_nodes(&self) -> impl Iterator<Item = LayoutNode> + '_ {
+    pub fn leaf_nodes(&self) -> impl Iterator<Item = LayoutNode> + '_ + Clone {
         self.graph
             .externals(Direction::Outgoing)
             .map(move |index| LayoutNode::new(self, index))
+    }
+
+    pub fn crossover_random_subtrees<R>(&mut self, other: &mut Self, rng: &mut R)
+    where
+        R: Rng + Sized,
+    {
+        let subtrees = match self.subtree_pairs(other).choose(rng) {
+            Some(value) => value,
+            None => return,
+        };
+        let subtree_indexes = (subtrees.0.index, subtrees.1.index);
+
+        self.crossover_subtrees(other, subtree_indexes);
+    }
+
+    // From the paper:
+    //
+    //     (…) swapping two subtrees each consisting of one I node and two L nodes is equivalent to
+    //     swapping the labels of the two I nodes. Therefore, for the crossover, we were only
+    //     interested in subtrees with at least three L nodes.
+    fn subtrees(&self) -> impl Iterator<Item = Subtree> + '_ + Clone {
+        self.internal_nodes().filter_map(|node| {
+            let mut bfs = Bfs::new(&self.graph, node.index);
+            let mut leaf_node_count: usize = 0;
+
+            while let Some(index) = bfs.next(&self.graph) {
+                if let Leaf(_) = self.graph[index] {
+                    leaf_node_count += 1
+                }
+            }
+
+            if leaf_node_count >= 3 {
+                Some(Subtree::new(self, node.index, leaf_node_count))
+            } else {
+                None
+            }
+        })
+    }
+
+    fn subtree_pairs(
+        &self,
+        other: &'a Self,
+    ) -> impl Iterator<Item = (Subtree, Subtree)> + '_ + Clone {
+        let self_subtrees = self.subtrees();
+        let other_subtrees = other.subtrees();
+
+        self_subtrees
+            .cartesian_product(other_subtrees)
+            .filter(|(subtree, other_subtree)| {
+                subtree.leaf_node_count == other_subtree.leaf_node_count
+            })
+    }
+
+    fn crossover_subtrees(&mut self, other: &mut Self, subtrees: (NodeIndex, NodeIndex)) {
+        let self_original = self.clone();
+
+        self.swap_subtree(other, subtrees.0, subtrees.1);
+        other.swap_subtree(&self_original, subtrees.1, subtrees.0);
+    }
+
+    fn swap_subtree(&mut self, other: &Self, self_index: NodeIndex, other_index: NodeIndex) {
+        let subtree_blueprint = other.subtree_to_blueprint(other_index);
+
+        let index_to_children = subtree_blueprint
+            .iter()
+            .map(|(label, children)| {
+                let slice_direction = match label.as_str() {
+                    "V" => Vertical,
+                    "H" => Horizontal,
+                    _ => unreachable!(),
+                };
+
+                (self.graph.add_node(Internal(slice_direction)), children)
+            })
+            .collect::<Vec<_>>();
+
+        for (parent_node_index, children_indices_in_blueprint) in index_to_children.iter() {
+            for child_index_in_blueprint in children_indices_in_blueprint.iter() {
+                let child_index = index_to_children[*child_index_in_blueprint].0;
+                self.graph.update_edge(*parent_node_index, child_index, ());
+            }
+        }
+
+        // Fill leaf nodes in new subtree.
+        let mut self_subtree_leaf_indices = vec![];
+        let mut self_subtree_internal_indices = vec![];
+        let indexes_of_nodes_with_less_than_two_children = self
+            .indexes_of_nodes_with_less_than_two_children()
+            .collect::<Vec<_>>();
+
+        for node in self.logical_subtree_bfs_iter(self_index) {
+            match node.node_label() {
+                Leaf(_) => {
+                    self_subtree_leaf_indices.push(node.index);
+                }
+                Internal(_) => {
+                    self_subtree_internal_indices.push(node.index);
+                }
+            }
+        }
+
+        let mut leaf_indices_iter = self_subtree_leaf_indices.iter();
+
+        for index in indexes_of_nodes_with_less_than_two_children {
+            while self.node_has_less_than_two_children(index) {
+                self.graph.update_edge(
+                    index,
+                    *leaf_indices_iter.next().expect("Ran out of leaf nodes"),
+                    (),
+                );
+            }
+        }
+
+        // Connect new subtree to parent node.
+        let subtree_root = self.at_index(self_index);
+        let parent = subtree_root.parent();
+        let parent_index = parent.map(|parent| parent.index);
+        let subtree_root_side = parent.and_then(|parent| parent.child_side(&subtree_root));
+
+        if parent.is_some() {
+            self.graph
+                .update_edge(parent_index.unwrap(), index_to_children[0].0, ());
+        }
+
+        // Remove leftover old nodes.
+        self.graph = self.graph.filter_map(
+            |index, weight| {
+                if self_subtree_internal_indices.contains(&index) {
+                    None
+                } else {
+                    Some(*weight)
+                }
+            },
+            // We want to keep all valid edges and they all have the weight of (), so let's just
+            // pass it here.
+            |_, _| Some(()),
+        );
+
+        // If the node we were replacing was originally on the left side, we now need to swap the
+        // children of the parent. That's because children are listed in the order of the creation
+        // of the edges, so without it our new node would end up as the right child.
+        //
+        // This needs to be done after removing the original node, as most methods on Layout assume
+        // that each internal node has two children.
+        if let Some(ChildSide::Left) = subtree_root_side {
+            self.swap_order_of_children(parent_index.unwrap());
+        }
     }
 
     // For debugging the graph in Graphviz.
@@ -467,10 +622,29 @@ impl<'a> Layout<'a> {
     }
 
     fn parent(&self, node: &LayoutNode) -> Option<LayoutNode> {
-        self.graph
-            .neighbors_directed(node.index, Direction::Incoming)
-            .next()
+        self.parent_index(node.index)
             .map(|index| LayoutNode::new(self, index))
+    }
+
+    // For situations where we just need the index alone and don't want the immutable borrow that
+    // LayoutNode acquires.
+    fn parent_index(&self, index: NodeIndex) -> Option<NodeIndex> {
+        self.graph
+            .neighbors_directed(index, Direction::Incoming)
+            .next()
+    }
+
+    fn swap_order_of_children(&mut self, node_index: NodeIndex) {
+        let children = self.at_index(node_index).children().unwrap();
+        let child_0 = children.0.index;
+        let child_1 = children.1.index;
+        let child_0_edge = self.graph.find_edge(node_index, child_0).unwrap();
+        let child_1_edge = self.graph.find_edge(node_index, child_1).unwrap();
+
+        self.graph.remove_edge(child_1_edge);
+        self.graph.remove_edge(child_0_edge);
+        self.graph.update_edge(node_index, child_1, ());
+        self.graph.update_edge(node_index, child_0, ());
     }
 
     // Returns a line of parents of the node, up to the root node.
@@ -501,36 +675,103 @@ impl<'a> Layout<'a> {
     fn at_index(&'a self, index: NodeIndex) -> LayoutNode<'a> {
         LayoutNode::new(self, index)
     }
+
+    // Logical as in it uses the `children` method to traverse the graph. `children` is also what
+    // the renderer uses to render the layout.
+    fn logical_bfs_iter(&self) -> LogicalBfs {
+        // Edge case in tests.
+        if self.graph.node_count() == 0 {
+            LogicalBfs::empty(self)
+        } else {
+            LogicalBfs::new(self, self.root_node().index)
+        }
+    }
+
+    fn logical_subtree_bfs_iter(&self, index: NodeIndex) -> LogicalBfs {
+        LogicalBfs::new(self, index)
+    }
+
+    fn logical_eq(&'a self, other: &'a Layout<'a>) -> Result<(), LogicalEqError<'a>> {
+        use LogicalEqError::*;
+
+        if self.canvas_dimensions != other.canvas_dimensions {
+            return Err(DifferentCanvasDimensions);
+        }
+
+        // This should only happen if the graph ends up having some dangling nodes.
+        if self.graph.node_count() != other.graph.node_count() {
+            return Err(UnevenNumberOfNodes);
+        }
+
+        // This should only happen if the graph ends up having some dangling nodes.
+        if self.graph.edge_count() != other.graph.edge_count() {
+            return Err(UnevenNumberOfEdges);
+        }
+
+        let mut self_iter = self.logical_bfs_iter().peekable();
+        let mut other_iter = other.logical_bfs_iter().peekable();
+        let self_root_node = self_iter.peek();
+        let other_root_node = other_iter.peek();
+
+        if let (Some(self_root_node), Some(other_root_node)) = (self_root_node, other_root_node) {
+            let self_root_node_label = self_root_node.node_label();
+            let other_root_node_label = other_root_node.node_label();
+
+            if self_root_node_label != other_root_node_label {
+                return Err(RootNodesHaveDifferentLabels(
+                    *self_root_node_label,
+                    *other_root_node_label,
+                ));
+            }
+        }
+
+        loop {
+            match (self_iter.next(), other_iter.next()) {
+                (Some(self_node), Some(other_node)) => {
+                    let self_children_node_labels = self_node
+                        .children()
+                        .map(|c| (*c.0.node_label(), *c.1.node_label()));
+                    let other_children_node_labels = other_node
+                        .children()
+                        .map(|c| (*c.0.node_label(), *c.1.node_label()));
+
+                    if self_children_node_labels != other_children_node_labels {
+                        return Err(ChildrenHaveDifferentLabels(
+                            (self_node, self_children_node_labels),
+                            (other_node, other_children_node_labels),
+                        ));
+                    }
+                }
+                (None, None) => {
+                    return Ok(());
+                }
+                _ => {
+                    // Since we already checked that the number of nodes and edges is equal, this
+                    // shouldn't happen unless we have a bug which completely screws up internal
+                    // graph structure.
+                    unreachable!();
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+enum LogicalEqError<'a> {
+    DifferentCanvasDimensions,
+    UnevenNumberOfNodes,
+    UnevenNumberOfEdges,
+    RootNodesHaveDifferentLabels(NodeLabel<'a>, NodeLabel<'a>),
+    ChildrenHaveDifferentLabels(
+        (LayoutNode<'a>, Option<(NodeLabel<'a>, NodeLabel<'a>)>),
+        (LayoutNode<'a>, Option<(NodeLabel<'a>, NodeLabel<'a>)>),
+    ),
 }
 
 impl PartialEq for Layout<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.canvas_dimensions == other.canvas_dimensions && graph_eq(&self.graph, &other.graph)
+        self.logical_eq(other).is_ok()
     }
-}
-
-// Taken from https://github.com/petgraph/petgraph/issues/199#issuecomment-484077775
-fn graph_eq<N, E, Ty, Ix>(
-    a: &petgraph::Graph<N, E, Ty, Ix>,
-    b: &petgraph::Graph<N, E, Ty, Ix>,
-) -> bool
-where
-    N: PartialEq,
-    E: PartialEq,
-    Ty: petgraph::EdgeType,
-    Ix: petgraph::graph::IndexType + PartialEq,
-{
-    let a_ns = a.raw_nodes().iter().map(|n| &n.weight);
-    let b_ns = b.raw_nodes().iter().map(|n| &n.weight);
-    let a_es = a
-        .raw_edges()
-        .iter()
-        .map(|e| (e.source(), e.target(), &e.weight));
-    let b_es = b
-        .raw_edges()
-        .iter()
-        .map(|e| (e.source(), e.target(), &e.weight));
-    a_ns.eq(b_ns) && a_es.eq(b_es)
 }
 
 #[derive(Clone, Copy)]
@@ -685,27 +926,221 @@ pub enum ChildSide {
     Right,
 }
 
+#[derive(Clone, Copy)]
+pub struct Subtree<'a> {
+    layout: &'a Layout<'a>,
+    pub index: NodeIndex,
+    pub leaf_node_count: usize,
+}
+
+impl PartialEq for Subtree<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+            && self.leaf_node_count == other.leaf_node_count
+            && ptr::eq(self.layout, other.layout)
+    }
+}
+
+impl<'a> Subtree<'a> {
+    pub fn new(layout: &'a Layout<'a>, index: NodeIndex, leaf_node_count: usize) -> Self {
+        Subtree {
+            layout,
+            index,
+            leaf_node_count,
+        }
+    }
+}
+
+impl std::fmt::Debug for Subtree<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("Subtree")
+            .field("index", &self.index)
+            .field("leaf_node_count", &self.leaf_node_count)
+            .finish()
+    }
+}
+
+struct LogicalBfs<'a> {
+    layout: &'a Layout<'a>,
+    indexes_to_visit: VecDeque<NodeIndex>,
+}
+
+impl<'a> LogicalBfs<'a> {
+    fn new(layout: &'a Layout<'a>, start_index: NodeIndex) -> Self {
+        LogicalBfs {
+            layout,
+            indexes_to_visit: VecDeque::from([start_index]),
+        }
+    }
+
+    fn empty(layout: &'a Layout<'a>) -> Self {
+        LogicalBfs {
+            layout,
+            indexes_to_visit: VecDeque::new(),
+        }
+    }
+}
+
+impl<'a> Iterator for LogicalBfs<'a> {
+    type Item = LayoutNode<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self
+            .indexes_to_visit
+            .pop_front()
+            .map(|index| self.layout.at_index(index))?;
+
+        if let Some((left_child, right_child)) = next.children() {
+            self.indexes_to_visit.push_back(left_child.index);
+            self.indexes_to_visit.push_back(right_child.index);
+        }
+
+        Some(next)
+    }
+}
+
+// Auxiliary function for creating blueprints in tests.
+#[cfg(test)]
+fn create_blueprint_from_slice(
+    dimensions: (u32, u32),
+    graph_representation: &[(&str, &[usize])],
+) -> LayoutBlueprint {
+    let graph_representation: Vec<(String, Vec<usize>)> = graph_representation
+        .iter()
+        .map(|(label, indices)| (label.to_string(), indices.to_vec()))
+        .collect();
+
+    LayoutBlueprint {
+        width: dimensions.0,
+        height: dimensions.1,
+        graph_representation,
+    }
+}
+
+#[cfg(test)]
+mod logical_bfs_tests {
+    use super::*;
+
+    #[test]
+    fn logical_bfs_iterates_correctly_on_simple_layouts() {
+        let blueprint =
+            create_blueprint_from_slice((10, 10), &[("V", &[1, 2]), ("H", &[]), ("V", &[])]);
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+        ];
+        let layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        let expected_node_labels = vec![
+            Internal(Vertical),
+            Internal(Horizontal),
+            Internal(Vertical),
+            Leaf(&images[0]),
+            Leaf(&images[1]),
+            Leaf(&images[2]),
+            Leaf(&images[3]),
+        ];
+        let actual_node_labels = layout
+            .logical_bfs_iter()
+            .map(|node| *node.node_label())
+            .collect::<Vec<_>>();
+
+        assert_eq!(expected_node_labels, actual_node_labels);
+    }
+
+    #[test]
+    fn logical_eq_works_for_simple_layouts_which_are_equal() {
+        let blueprint =
+            create_blueprint_from_slice((10, 10), &[("V", &[1, 2]), ("H", &[]), ("V", &[])]);
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+        ];
+        let layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        assert!(layout.logical_eq(&layout).is_ok());
+    }
+
+    #[test]
+    fn logical_eq_works_for_simple_layouts_which_are_not_equal() {
+        let blueprint =
+            create_blueprint_from_slice((10, 10), &[("V", &[1, 2]), ("H", &[]), ("V", &[])]);
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+        ];
+        let layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+        let other_blueprint =
+            create_blueprint_from_slice((10, 10), &[("V", &[1, 2]), ("H", &[]), ("H", &[])]);
+        let other_layout = Layout::from_blueprint(&other_blueprint, &images).unwrap();
+
+        assert!(!layout.logical_eq(&other_layout).is_ok());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rand_core::SeedableRng;
     use rand_pcg::Pcg64;
 
-    // Auxiliary function for creating blueprints in tests.
-    fn create_blueprint_from_slice(
-        dimensions: (u32, u32),
-        graph_representation: &[(&str, &[usize])],
-    ) -> LayoutBlueprint {
-        let graph_representation: Vec<(String, Vec<usize>)> = graph_representation
-            .iter()
-            .map(|(label, indices)| (label.to_string(), indices.to_vec()))
-            .collect();
-
-        LayoutBlueprint {
-            width: dimensions.0,
-            height: dimensions.1,
-            graph_representation,
-        }
+    macro_rules! assert_logical_eq_of_layouts {
+        ($left_layout:expr, $right_layout:expr) => {
+            match $left_layout.logical_eq($right_layout) {
+                Ok(_) => {}
+                Err(LogicalEqError::ChildrenHaveDifferentLabels(
+                    (left_layout_node, left_layout_children),
+                    (right_layout_node, right_layout_children),
+                )) => {
+                    panic!(
+                        "The layouts appear to have different children for a particular node.\n\n\
+                        The node from the left layout and its children look like this:\n\
+                        {:?}\n{:?}\n\n\
+                        The node from the right layout and its children look like this:\n\
+                        {:?}\n{:?}\n",
+                        left_layout_node,
+                        left_layout_children,
+                        right_layout_node,
+                        right_layout_children
+                    );
+                }
+                Err(LogicalEqError::RootNodesHaveDifferentLabels(
+                    left_layout_label,
+                    right_layout_label,
+                )) => {
+                    panic!(
+                        "The layouts have different root nodes: {:?} vs {:?}",
+                        left_layout_label, right_layout_label
+                    );
+                }
+                Err(LogicalEqError::UnevenNumberOfNodes) => {
+                    panic!(
+                        "The layouts have different number of nodes: {} vs {}",
+                        $left_layout.graph.node_count(),
+                        $right_layout.graph.node_count()
+                    );
+                }
+                Err(LogicalEqError::UnevenNumberOfEdges) => {
+                    panic!(
+                        "The layouts have different number of edges: {} vs {}",
+                        $left_layout.graph.edge_count(),
+                        $right_layout.graph.edge_count()
+                    );
+                }
+                Err(LogicalEqError::DifferentCanvasDimensions) => {
+                    panic!(
+                        "The layouts have different canvas dimensions: {:?} vs {:?}",
+                        $left_layout.canvas_dimensions, $right_layout.canvas_dimensions
+                    );
+                }
+            }
+        };
     }
 
     #[test]
@@ -719,7 +1154,7 @@ mod tests {
             canvas_dimensions: Dimensions::from_tuple((1, 1)),
         };
 
-        assert_eq!(layout_1, layout_2);
+        assert_logical_eq_of_layouts!(layout_1, &layout_2);
     }
 
     #[test]
@@ -749,7 +1184,7 @@ mod tests {
         layout_1.graph.add_node(Internal(Vertical));
         layout_2.graph.add_node(Internal(Vertical));
 
-        assert_eq!(layout_1, layout_2);
+        assert_logical_eq_of_layouts!(layout_1, &layout_2);
     }
 
     #[test]
@@ -789,7 +1224,7 @@ mod tests {
         layout_2.add_node(root_index_2, Leaf(&image_1));
         layout_2.add_node(root_index_2, Leaf(&image_2));
 
-        assert_eq!(layout_1, layout_2);
+        assert_logical_eq_of_layouts!(layout_1, &layout_2);
     }
 
     #[test]
@@ -862,7 +1297,7 @@ mod tests {
             .graph
             .update_edge(h_index, image_2_index, ());
 
-        assert_eq!(Ok(expected_layout), layout_from_blueprint);
+        assert_logical_eq_of_layouts!(expected_layout, layout_from_blueprint.as_ref().unwrap());
     }
 
     // Since we only have two internal nodes, we know that if pass one of them to
@@ -995,5 +1430,214 @@ mod tests {
                 layout.dot(),
             );
         }
+    }
+
+    #[test]
+    fn find_subtrees() {
+        let blueprint =
+            create_blueprint_from_slice((10, 10), &[("V", &[1]), ("H", &[2]), ("H", &[])]);
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+        ];
+        let layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        let subtrees: Vec<Subtree> = layout.subtrees().collect();
+
+        assert_eq!(Subtree::new(&layout, NodeIndex::new(0), 4), subtrees[0]);
+        assert_eq!(Subtree::new(&layout, NodeIndex::new(1), 3), subtrees[1]);
+    }
+
+    #[test]
+    fn find_pairs_in_subtrees() {
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+            RgbImage::new(1, 5),
+        ];
+        let blueprint1 = create_blueprint_from_slice(
+            (10, 10),
+            &[("V", &[1]), ("V", &[2]), ("V", &[3]), ("V", &[])],
+        );
+        let blueprint2 = create_blueprint_from_slice(
+            (10, 10),
+            &[("H", &[1, 2]), ("V", &[3]), ("V", &[]), ("V", &[])],
+        );
+        let layout_1 = Layout::from_blueprint(&blueprint1, &images).unwrap();
+        let layout_2 = Layout::from_blueprint(&blueprint2, &images).unwrap();
+
+        let expected_pairs = vec![
+            (
+                Subtree::new(&layout_1, NodeIndex::new(0), 5),
+                Subtree::new(&layout_2, NodeIndex::new(0), 5),
+            ),
+            (
+                Subtree::new(&layout_1, NodeIndex::new(2), 3),
+                Subtree::new(&layout_2, NodeIndex::new(1), 3),
+            ),
+        ];
+
+        let actual_pairs: Vec<(Subtree, Subtree)> = layout_1.subtree_pairs(&layout_2).collect();
+
+        assert_eq!(expected_pairs, actual_pairs);
+    }
+
+    #[test]
+    fn swapping_order_of_children() {
+        let blueprint =
+            create_blueprint_from_slice((10, 10), &[("V", &[1, 2]), ("H", &[]), ("V", &[])]);
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+        ];
+        let mut layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        layout.swap_order_of_children(NodeIndex::new(0));
+
+        let (left_child, right_child) = layout.at_index(NodeIndex::new(0)).children().unwrap();
+        assert_eq!(Internal(Vertical), *left_child.node_label());
+        assert_eq!(Internal(Horizontal), *right_child.node_label());
+    }
+
+    #[test]
+    fn blueprint_of_layout_with_swapped_children_leads_to_equal_layout() {
+        let blueprint =
+            create_blueprint_from_slice((10, 10), &[("V", &[1, 2]), ("H", &[]), ("V", &[])]);
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+        ];
+        let mut layout = Layout::from_blueprint(&blueprint, &images).unwrap();
+
+        layout.swap_order_of_children(NodeIndex::new(0));
+
+        let layout_from_blueprint =
+            Layout::from_blueprint(&layout.to_blueprint(), &images).unwrap();
+        let (left_child, right_child) = layout_from_blueprint
+            .at_index(NodeIndex::new(0))
+            .children()
+            .unwrap();
+        assert_eq!(Internal(Vertical), *left_child.node_label());
+        assert_eq!(Internal(Horizontal), *right_child.node_label());
+    }
+
+    #[test]
+    fn swaping_single_subtree() {
+        let images1 = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+            RgbImage::new(1, 5),
+        ];
+        let blueprint1 = create_blueprint_from_slice(
+            (10, 10),
+            &[("V", &[1]), ("H", &[2]), ("V", &[3]), ("H", &[])],
+        );
+        let blueprint2 = create_blueprint_from_slice(
+            (10, 10),
+            &[("H", &[1, 2]), ("H", &[3]), ("V", &[]), ("V", &[])],
+        );
+        let mut images2 = images1.clone();
+        images2.reverse();
+
+        let mut layout = Layout::from_blueprint(&blueprint1, &images1).unwrap();
+        let layout_other = Layout::from_blueprint(&blueprint2, &images2).unwrap();
+
+        layout.swap_subtree(&layout_other, NodeIndex::new(2), NodeIndex::new(1));
+
+        let expected_layout_blueprint = create_blueprint_from_slice(
+            (10, 10),
+            &[("V", &[1]), ("H", &[2]), ("H", &[3]), ("V", &[])],
+        );
+
+        assert_eq!(expected_layout_blueprint, layout.to_blueprint());
+        assert_eq!(
+            images1,
+            layout
+                .leaf_nodes()
+                .map(|n| n.image().unwrap())
+                .cloned()
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn swapping_two_subtrees_keeps_logical_structure() {
+        let images1 = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+            RgbImage::new(1, 5),
+        ];
+        let blueprint1 = create_blueprint_from_slice(
+            (10, 10),
+            &[("V", &[1]), ("H", &[2]), ("V", &[3]), ("H", &[])],
+        );
+        let blueprint2 = create_blueprint_from_slice(
+            (10, 10),
+            &[("H", &[1, 2]), ("H", &[3]), ("V", &[]), ("V", &[])],
+        );
+        let mut images2 = images1.clone();
+        images2.reverse();
+
+        let mut layout_1 = Layout::from_blueprint(&blueprint1, &images1).unwrap();
+        let mut layout_2 = Layout::from_blueprint(&blueprint2, &images2).unwrap();
+
+        layout_1.crossover_subtrees(&mut layout_2, (NodeIndex::new(2), NodeIndex::new(1)));
+
+        let expected_layout_1_blueprint = create_blueprint_from_slice(
+            (10, 10),
+            &[("V", &[1]), ("H", &[2]), ("H", &[3]), ("V", &[])],
+        );
+        let expected_layout_2_blueprint = create_blueprint_from_slice(
+            (10, 10),
+            &[("H", &[1, 2]), ("V", &[3]), ("V", &[]), ("H", &[])],
+        );
+        let expected_layout_1 =
+            Layout::from_blueprint(&expected_layout_1_blueprint, &images1).unwrap();
+        let expected_layout_2 =
+            Layout::from_blueprint(&expected_layout_2_blueprint, &images2).unwrap();
+
+        assert_logical_eq_of_layouts!(expected_layout_1, &layout_1);
+        assert_logical_eq_of_layouts!(expected_layout_2, &layout_2);
+    }
+
+    #[test]
+    fn swapping_the_whole_layout_keeps_logical_structure() {
+        let images = vec![
+            RgbImage::new(1, 1),
+            RgbImage::new(1, 2),
+            RgbImage::new(1, 3),
+            RgbImage::new(1, 4),
+            RgbImage::new(1, 5),
+        ];
+        let blueprint1 = create_blueprint_from_slice(
+            (10, 10),
+            &[("V", &[1]), ("H", &[2]), ("V", &[3]), ("H", &[])],
+        );
+        let blueprint2 = create_blueprint_from_slice(
+            (10, 10),
+            &[("H", &[1, 2]), ("H", &[3]), ("V", &[]), ("V", &[])],
+        );
+
+        let mut layout_1 = Layout::from_blueprint(&blueprint1, &images).unwrap();
+        let mut layout_2 = Layout::from_blueprint(&blueprint2, &images).unwrap();
+        let expected_layout_1 = layout_2.clone();
+        let expected_layout_2 = layout_1.clone();
+
+        layout_1.crossover_subtrees(&mut layout_2, (NodeIndex::new(0), NodeIndex::new(0)));
+
+        assert_logical_eq_of_layouts!(expected_layout_1, &layout_1);
+        assert_logical_eq_of_layouts!(expected_layout_2, &layout_2);
     }
 }
