@@ -164,14 +164,50 @@ const randomLayoutTest = async () => {
 let benchmarkFiles = null;
 
 const prepareBenchmark = async () => {
+  const scriptPromise = loadScript('vendor/lodash.min.js')
+    .then(() => loadScript('vendor/platform.js'))
+    .then(() => loadScript('vendor/benchmark.js'))
+
   const loadFile = (n) => fetch(`test-images/${n}`)
     .then((response) => response.blob());
 
   benchmarkFiles = await Promise.all([
     '140.jpg', '175.jpg', '220.jpg', '192.jpg', '302.jpg', '200.jpg', '170.jpg'
   ].map((name) => loadFile(name)))
+
+  await scriptPromise
 }
 
-const benchmark = async (seed) => {
-  generateCollage(benchmarkFiles, seed).catch(console.error)
+const benchmark = async (seed = benchmarkSeed) => {
+  const suite = new Benchmark.Suite;
+  suite
+    .add('Generate layout', {
+      defer: true,
+      fn: (deferred) => {
+        generateCollage(benchmarkFiles, seed).then(() => {
+          deferred.resolve();
+        },
+          console.error)
+      }
+    })
+    .on('cycle', function(event) {
+      console.log(String(event.target));
+      console.log(event.target.stats.mean)
+    })
+    .on('complete', function() {
+      console.log('Benchmark finished')
+    })
+    .run();
 }
+
+const benchmarkOnce = async (seed = benchmarkSeed) => {
+  generateCollage(benchmarkFiles, seed).catch(console.error);
+}
+
+const loadScript = (path) => new Promise((resolve, reject) => {
+  let script = document.createElement('script');
+  script.onload = () => { resolve() };
+  script.onerror = () => { reject() };
+  script.setAttribute('src', path);
+  document.body.appendChild(script);
+})
