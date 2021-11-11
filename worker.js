@@ -16,7 +16,8 @@ onmessage = function(event) {
   switch (action) {
     case 'generate_layout': {
       const imageArrays = payload[0];
-      const result = generate_layout(imageArrays);
+      const seed = payload[1];
+      const result = generate_layout(imageArrays, seed);
       postMessage(result, [result.buffer]);
       break;
     }
