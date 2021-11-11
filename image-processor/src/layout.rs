@@ -94,14 +94,14 @@ impl<'a> Layout<'a> {
         };
         let mut random_images = images.choose_multiple(rng, images.len());
 
-        layout.graph.add_node(NodeLabel::Internal(rand::random()));
+        layout.graph.add_node(NodeLabel::Internal(rng.gen()));
 
         if images.len() > 2 {
             // Total number of internal nodes must be equal to <number of images> - 1 and we
             // already added one internal node.
             for _ in 0..images.len() - 2 {
                 let random_index = layout.random_index_of_node_with_less_than_two_children(rng);
-                layout.add_node(random_index, NodeLabel::Internal(rand::random()));
+                layout.add_node(random_index, NodeLabel::Internal(rng.gen()));
             }
         }
 
