@@ -13,7 +13,7 @@ use rand::{
     Rng,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::ptr;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -208,19 +208,9 @@ impl<'a> Layout<'a> {
     }
 
     pub fn to_blueprint(&self) -> LayoutBlueprint {
-        let blueprint = self.subtree_to_blueprint(self.root_node().index);
-
-        LayoutBlueprint {
-            graph_representation: blueprint,
-            width: self.canvas_dimensions.width,
-            height: self.canvas_dimensions.height,
-        }
-    }
-
-    fn subtree_to_blueprint(&self, index: NodeIndex) -> Vec<(String, Vec<usize>)> {
         let mut blueprint_with_node_indices = vec![];
 
-        for node in self.logical_subtree_bfs_iter(index) {
+        for node in self.logical_bfs_iter() {
             if let Internal(_) = node.node_label() {
                 let children = node.children().unwrap();
 
@@ -260,7 +250,11 @@ impl<'a> Layout<'a> {
             blueprint.push((label, children));
         }
 
-        blueprint
+        LayoutBlueprint {
+            graph_representation: blueprint,
+            width: self.canvas_dimensions.width,
+            height: self.canvas_dimensions.height,
+        }
     }
 
     pub fn aspect_ratio(&self) -> f64 {
@@ -509,73 +503,66 @@ impl<'a> Layout<'a> {
     }
 
     fn swap_subtree(&mut self, other: &Self, self_index: NodeIndex, other_index: NodeIndex) {
-        let subtree_blueprint = other.subtree_to_blueprint(other_index);
-
-        let index_to_children = subtree_blueprint
-            .iter()
-            .map(|(label, children)| {
-                let slice_direction = match label.as_str() {
-                    "V" => Vertical,
-                    "H" => Horizontal,
-                    _ => unreachable!(),
-                };
-
-                (self.graph.add_node(Internal(slice_direction)), children)
-            })
-            .collect::<Vec<_>>();
-
-        for (parent_node_index, children_indices_in_blueprint) in index_to_children.iter() {
-            for child_index_in_blueprint in children_indices_in_blueprint.iter() {
-                let child_index = index_to_children[*child_index_in_blueprint].0;
-                self.graph.update_edge(*parent_node_index, child_index, ());
-            }
-        }
-
-        // Fill leaf nodes in new subtree.
-        let mut self_subtree_leaf_indices = vec![];
-        let mut self_subtree_internal_indices = vec![];
-        let indexes_of_nodes_with_less_than_two_children = self
-            .indexes_of_nodes_with_less_than_two_children()
-            .collect::<Vec<_>>();
+        // Collect indices and images from the old subtree. They will be needed for preserving the
+        // order of leaf nodes and the old nodes will be deleted later.
+        let mut old_subtree_images = vec![];
+        let mut old_subtree_indices = HashSet::new();
 
         for node in self.logical_subtree_bfs_iter(self_index) {
-            match node.node_label() {
-                Leaf(_) => {
-                    self_subtree_leaf_indices.push(node.index);
-                }
-                Internal(_) => {
-                    self_subtree_internal_indices.push(node.index);
-                }
+            old_subtree_indices.insert(node.index);
+            if let Leaf(image) = self.graph[node.index] {
+                old_subtree_images.push(image);
             }
         }
 
-        let mut leaf_indices_iter = self_subtree_leaf_indices.iter();
+        // Collect parent information for later, before changing any nodes in self.
+        let parent_index = self.parent_index(self_index);
+        let subtree_root_side = parent_index
+            .map(|idx| self.at_index(idx))
+            .and_then(|parent| parent.child_side(&self.at_index(self_index)));
 
-        for index in indexes_of_nodes_with_less_than_two_children {
-            while self.node_has_less_than_two_children(index) {
-                self.graph.update_edge(
-                    index,
-                    *leaf_indices_iter.next().expect("Ran out of leaf nodes"),
-                    (),
-                );
+        // Iterate over the other subtree and recreate it in self.
+        let mut other_indices_to_visit = VecDeque::new();
+        let other_subtree_root_node = other.at_index(other_index);
+        if let Internal(slice_direction) = other_subtree_root_node.node_label() {
+            let new_node_index = self.graph.add_node(Internal(*slice_direction));
+            let (left_child, right_child) = other_subtree_root_node.children().unwrap();
+
+            if let Some(parent_index) = parent_index {
+                self.graph.update_edge(parent_index, new_node_index, ());
             }
+
+            other_indices_to_visit.push_back((new_node_index, left_child));
+            other_indices_to_visit.push_back((new_node_index, right_child));
+        } else {
+            unreachable!("The start of the subtree should always be an internal node");
         }
 
-        // Connect new subtree to parent node.
-        let subtree_root = self.at_index(self_index);
-        let parent = subtree_root.parent();
-        let parent_index = parent.map(|parent| parent.index);
-        let subtree_root_side = parent.and_then(|parent| parent.child_side(&subtree_root));
+        let mut old_subtree_images_iter = old_subtree_images.iter();
 
-        if parent.is_some() {
-            self.graph
-                .update_edge(parent_index.unwrap(), index_to_children[0].0, ());
+        while let Some((new_parent_index, other_node)) = other_indices_to_visit.pop_front() {
+            let new_node_label = match other_node.node_label() {
+                Internal(slice_direction) => Internal(*slice_direction),
+                // We need to keep the order of the leaf nodes in the self tree, so any leaf node
+                // from the other subtree is replaced with one from the old self subtree.
+                Leaf(_) => Leaf(old_subtree_images_iter.next().expect("Ran out of images")),
+            };
+            let new_node_index = self.graph.add_node(new_node_label);
+            self.graph.update_edge(new_parent_index, new_node_index, ());
+
+            let (left_child, right_child) = match other_node.children() {
+                Some(children) => children,
+                None => continue,
+            };
+
+            other_indices_to_visit.push_back((new_node_index, left_child));
+            other_indices_to_visit.push_back((new_node_index, right_child));
         }
 
         // Remove leftover old nodes.
         self.graph = self.graph.filter_map(
             |index, weight| {
-                if self_subtree_internal_indices.contains(&index) {
+                if old_subtree_indices.contains(&index) {
                     None
                 } else {
                     Some(*weight)
@@ -586,9 +573,9 @@ impl<'a> Layout<'a> {
             |_, _| Some(()),
         );
 
-        // If the node we were replacing was originally on the left side, we now need to swap the
-        // children of the parent. That's because children are listed in the order of the creation
-        // of the edges, so without it our new node would end up as the right child.
+        // If the subtree root node we were replacing was originally on the left side, we now need
+        // to swap the children of its parent. That's because children are listed in the order of
+        // the creation of the edges, so without it our new node would end up as the right child.
         //
         // This needs to be done after removing the original node, as most methods on Layout assume
         // that each internal node has two children.
@@ -1531,7 +1518,7 @@ mod tests {
     }
 
     #[test]
-    fn swaping_single_subtree() {
+    fn swapping_single_subtree() {
         let images1 = vec![
             RgbImage::new(1, 1),
             RgbImage::new(1, 2),
