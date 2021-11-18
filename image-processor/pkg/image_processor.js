@@ -134,19 +134,24 @@ function passArrayJsValueToWasm0(array, malloc) {
     return ptr;
 }
 
+function isLikeNone(x) {
+    return x === undefined || x === null;
+}
+
 function getArrayU8FromWasm0(ptr, len) {
     return getUint8Memory0().subarray(ptr / 1, ptr / 1 + len);
 }
 /**
 * @param {(Uint8Array)[]} image_arrays
+* @param {number | undefined} seed
 * @returns {Uint8Array}
 */
-__exports.generate_layout = function(image_arrays) {
+__exports.generate_layout = function(image_arrays, seed) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
         var ptr0 = passArrayJsValueToWasm0(image_arrays, wasm.__wbindgen_malloc);
         var len0 = WASM_VECTOR_LEN;
-        wasm.generate_layout(retptr, ptr0, len0);
+        wasm.generate_layout(retptr, ptr0, len0, !isLikeNone(seed), isLikeNone(seed) ? 0 : seed);
         var r0 = getInt32Memory0()[retptr / 4 + 0];
         var r1 = getInt32Memory0()[retptr / 4 + 1];
         var v1 = getArrayU8FromWasm0(r0, r1).slice();
