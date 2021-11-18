@@ -11,6 +11,8 @@ mod utils;
 use crate::image_for_processing::{ImageForProcessing, PageOrientation::*};
 pub use crate::layout::{Layout, LayoutBlueprint};
 use image::{GenericImage, RgbImage};
+use rand_core::SeedableRng;
+use rand_pcg::Pcg64;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -26,7 +28,7 @@ pub fn setup() {
 }
 
 #[wasm_bindgen]
-pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
+pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>, seed: Option<u32>) -> Vec<u8> {
     let mut images: Vec<RgbImage> = image_arrays
         .into_iter()
         .enumerate()
@@ -44,7 +46,14 @@ pub fn generate_layout(image_arrays: Vec<js_sys::Uint8Array>) -> Vec<u8> {
 
     if images.len() > 2 {
         console::time_with_label("generating random layout");
-        let layout = algorithm::generate_layout(&images, &mut rand::thread_rng()).unwrap();
+        let layout = match seed {
+            Some(seed) => {
+                let seed = seed as u64;
+                let mut rng = Pcg64::seed_from_u64(seed);
+                algorithm::generate_layout(&images, &mut rng, Some(seed)).unwrap()
+            }
+            None => algorithm::generate_layout(&images, &mut rand::thread_rng(), None).unwrap(),
+        };
         console::time_end_with_label("generating random layout");
 
         console::group_1(&"Layout debug".into());

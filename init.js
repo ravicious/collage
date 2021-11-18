@@ -11,6 +11,8 @@ app.ports.sendImagesToJs.subscribe((files) => {
   generateCollage(files).catch(console.error)
 })
 
+const benchmarkSeed = 1338;
+
 worker.onmessage = (event) => {
   if (event.data[0] == 'ready') {
     if (window.location.hash.includes("blueprintLayoutTest")) {
@@ -20,10 +22,16 @@ worker.onmessage = (event) => {
     if (window.location.hash.includes("randomLayoutTest")) {
       randomLayoutTest()
     }
+
+    if (window.location.hash.includes("benchmark")) {
+      prepareBenchmark().then(() => {
+        console.log("Benchmark prepared")
+      })
+    }
   }
 }
 
-const generateCollage = async (files) => {
+const generateCollage = async (files, seed) => {
   URL.revokeObjectURL(resultImg.src);
   resultImg.src = "";
 
@@ -32,7 +40,7 @@ const generateCollage = async (files) => {
   )
 
   console.time('generate_layout');
-  const resultArray = await generate_layout(imageArrays);
+  const resultArray = await generate_layout(imageArrays, seed);
   console.timeEnd('generate_layout');
 
   resultImg.src = URL.createObjectURL(
@@ -44,10 +52,10 @@ const generateCollage = async (files) => {
 
 // Wrapping the message passing in a promise.
 // The worker code is simple enough that we can let ourselves do that.
-const generate_layout = (imageArrays) => new Promise((resolve, reject) => {
+const generate_layout = (imageArrays, seed) => new Promise((resolve, reject) => {
   worker.onmessage = (event) => { resolve(event.data) }
   worker.postMessage(
-    ['generate_layout', imageArrays],
+    ['generate_layout', imageArrays, seed],
     imageArrays.map((imageArray) => imageArray.buffer)
   )
 })
@@ -152,3 +160,54 @@ const randomLayoutTest = async () => {
 
   generateCollage(files).catch(console.error)
 }
+
+let benchmarkFiles = null;
+
+const prepareBenchmark = async () => {
+  const scriptPromise = loadScript('vendor/lodash.min.js')
+    .then(() => loadScript('vendor/platform.js'))
+    .then(() => loadScript('vendor/benchmark.js'))
+
+  const loadFile = (n) => fetch(`test-images/${n}`)
+    .then((response) => response.blob());
+
+  benchmarkFiles = await Promise.all([
+    '140.jpg', '175.jpg', '220.jpg', '192.jpg', '302.jpg', '200.jpg', '170.jpg'
+  ].map((name) => loadFile(name)))
+
+  await scriptPromise
+}
+
+const benchmark = async (seed = benchmarkSeed) => {
+  const suite = new Benchmark.Suite;
+  suite
+    .add('Generate layout', {
+      defer: true,
+      fn: (deferred) => {
+        generateCollage(benchmarkFiles, seed).then(() => {
+          deferred.resolve();
+        },
+          console.error)
+      }
+    })
+    .on('cycle', function(event) {
+      console.log(String(event.target));
+      console.log(event.target.stats.mean)
+    })
+    .on('complete', function() {
+      console.log('Benchmark finished')
+    })
+    .run();
+}
+
+const benchmarkOnce = async (seed = benchmarkSeed) => {
+  generateCollage(benchmarkFiles, seed).catch(console.error);
+}
+
+const loadScript = (path) => new Promise((resolve, reject) => {
+  let script = document.createElement('script');
+  script.onload = () => { resolve() };
+  script.onerror = () => { reject() };
+  script.setAttribute('src', path);
+  document.body.appendChild(script);
+})

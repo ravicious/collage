@@ -5,6 +5,8 @@ use genevo::{
     random::Rng,
 };
 use image::RgbImage;
+use rand_core::SeedableRng;
+use rand_pcg::Pcg64;
 use std::cmp::Ordering;
 
 use crate::layout::{Layout, LayoutNode};
@@ -158,7 +160,11 @@ impl<'a> MutationOp<Layout<'a>> for LayoutMutation {
     }
 }
 
-pub fn generate_layout<'a, R>(images: &'a [RgbImage], rng: &mut R) -> Result<Layout<'a>, String>
+pub fn generate_layout<'a, R>(
+    images: &'a [RgbImage],
+    rng: &mut R,
+    seed: Option<u64>,
+) -> Result<Layout<'a>, String>
 where
     R: Rng + Sized,
 {
@@ -175,7 +181,7 @@ where
             .collect(),
     );
 
-    let mut layout_sim = simulate(
+    let layout_sim = simulate(
         genetic_algorithm()
             .with_evaluation(FitnessCalc)
             .with_selection(MaximizeSelector::new(
@@ -191,8 +197,14 @@ where
     .until(or(
         FitnessLimit::new(FitnessCalc.highest_possible_fitness()),
         GenerationLimit::new(generation_limit),
-    ))
-    .build();
+    ));
+    let mut layout_sim = match seed {
+        Some(seed) => {
+            let mut rng = Pcg64::seed_from_u64(seed);
+            layout_sim.build_with_seed(rng.gen())
+        }
+        None => layout_sim.build(),
+    };
 
     if let Ok(SimResult::Final(step, _, _, _)) = layout_sim.run() {
         return Ok(step.result.best_solution.solution.genome);
